@@ -102,8 +102,8 @@ data class AppSettings(
     val telemetryEnabled: String = "false",
 
     /** 启动时自动检查更新；只控启动自检，设置页手动检查不受它影响 */
-    @PrefKey(default = "true")
-    val autoCheckUpdate: String = "true",
+    @PrefKey(default = "false")
+    val autoCheckUpdate: String = "false",
 
     /** 启动自检发现新版本时自动下载并拉起安装器；关闭则弹窗询问。默认关，静默下载近 200MB 要用户先点头 */
     @PrefKey(default = "false")
@@ -114,8 +114,8 @@ data class AppSettings(
     val updateChannel: String = "STABLE",
 
     /** [com.aliothmoon.maafw.update.UpdateSource] 的 name；检查与下载都只走这一个源 */
-    @PrefKey(default = "MIRRORCHYAN")
-    val updateSource: String = "MIRRORCHYAN",
+    @PrefKey(default = "GITHUB")
+    val updateSource: String = "GITHUB",
 
     /** 后台模式运行中回桌面自动进画中画；只缩预览画面，小窗内无法操作 */
     @PrefKey(default = "true")

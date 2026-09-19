@@ -112,6 +112,8 @@ object VirtualDisplayManager {
             return displayId.get()
         } catch (e: Exception) {
             Ln.e("VirtualDisplayManager start failed", e)
+            runCatching { releaseResources() }
+                .onFailure { cleanup -> Ln.w("VirtualDisplayManager cleanup after start failure failed: ${cleanup.message}") }
             state.set(STATE_IDLE)
             return DISPLAY_NONE
         }
@@ -129,15 +131,34 @@ object VirtualDisplayManager {
         val physicalRotation = runCatching { wm.rotation }.getOrDefault(-1)
         Ln.i("Physical display rotation: $physicalRotation")
 
-        val vd = ServiceManager.getDisplayManager()
-            .createNewVirtualDisplay(
+        val displayManager = ServiceManager.getDisplayManager()
+        var effectiveFlags = flags
+        val vd = try {
+            displayManager.createNewVirtualDisplay(
                 VD_NAME,
                 cfg.width,
                 cfg.height,
                 cfg.dpi,
                 surface,
-                flags
+                effectiveFlags
             )
+        } catch (e: SecurityException) {
+            val fallbackFlags = buildShellSafeDisplayFlags()
+            if (fallbackFlags == effectiveFlags) throw e
+            Ln.w(
+                "Privileged virtual display flags denied (${e.message}); " +
+                        "retrying with shell-safe flags=0x${fallbackFlags.toString(16)}"
+            )
+            effectiveFlags = fallbackFlags
+            displayManager.createNewVirtualDisplay(
+                VD_NAME,
+                cfg.width,
+                cfg.height,
+                cfg.dpi,
+                surface,
+                effectiveFlags
+            )
+        }
         virtualDisplay.set(vd)
         val vdId = vd.display.displayId
         displayId.set(vdId)
@@ -148,7 +169,7 @@ object VirtualDisplayManager {
             ", configured=${cfg.width}x${cfg.height}" +
             ", actual=${d.width}x${d.height}" +
             ", rotation=${d.rotation}" +
-            ", flags=0x${flags.toString(16)}"
+            ", flags=0x${effectiveFlags.toString(16)}"
         )
 
         if (d.rotation != Surface.ROTATION_0) {
@@ -175,9 +196,25 @@ object VirtualDisplayManager {
         }
     }
 
+    /**
+     * Shizuku/adb 的 shell uid 没有 ADD_TRUSTED_DISPLAY 等 signature 权限。
+     * 基础 flag 足以提供独立画面与触摸；高级 display-group/focus flag 仅在系统允许时使用。
+     */
+    private fun buildShellSafeDisplayFlags(): Int {
+        var flags = (VIRTUAL_DISPLAY_FLAG_PUBLIC
+                or VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+                or VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH)
+        if (VD_DESTROY_CONTENT) {
+            flags = flags or VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
+        }
+        if (VD_SYSTEM_DECORATIONS) {
+            flags = flags or VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+        }
+        return flags
+    }
+
     private fun buildDisplayFlags(): Int {
         var flags = (VIRTUAL_DISPLAY_FLAG_PUBLIC
-                or VIRTUAL_DISPLAY_FLAG_PRESENTATION
                 or VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
                 or VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH)
 

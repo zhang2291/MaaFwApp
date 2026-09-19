@@ -8,6 +8,14 @@ MaaFramework 的 Android GUI
 [![Commit Activity](https://img.shields.io/github/commit-activity/m/Aliothmoon/MaaFwApp?style=flat-square&color=00d4aa)](https://github.com/Aliothmoon/MaaFwApp/commits)
 [![Stars](https://img.shields.io/github/stars/Aliothmoon/MaaFwApp?style=flat-square&color=ffca28)](https://github.com/Aliothmoon/MaaFwApp/stargazers)
 
+## ⚠️ Fork 说明
+
+> 本仓库是 [Aliothmoon/MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) 的个人 Fork。原项目及其版权归原作者/贡献者所有。
+>
+> 本 Fork 仅用于个人设备上的本地使用、功能集成与测试，包含针对 MBCCtools 使用场景的定制修改；不代表上游官方版本，也不承诺通用兼容性或用户支持。
+>
+> 如需官方版本、通用文档或问题反馈，请优先访问[上游仓库](https://github.com/Aliothmoon/MaaFwApp)，并遵守原项目 LICENSE。
+
 ## 项目简介
 
 MaaFwApp 是基于 [MaaFramework](https://github.com/MaaXYZ/MaaFramework) 的 Android 通用 GUI。资源开发者通过 [Project Interface V2](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/zh_cn/3.3-ProjectInterfaceV2%E5%8D%8F%E8%AE%AE.md) 描述任务、选项和界面文本，用户即可在手机上配置并运行自动化任务。

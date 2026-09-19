@@ -50,6 +50,9 @@ class MaaRunner(private val agentHost: AgentHost) {
     private var controller: Pointer? = null
     private var tasker: Pointer? = null
 
+    /** debug 构建运行时保存失败现场；release/非 debug 不写。 */
+    private var debugSnapshotDir: String? = null
+
     /** 已构建的 resource 对应的路径；变了就重建 */
     private var loadedResourcePaths: List<String> = emptyList()
 
@@ -142,6 +145,7 @@ class MaaRunner(private val agentHost: AgentHost) {
         )
         // 节点出错时自动存一张现场图，比事后复现便宜；SAVE_DRAW 会每次识别都写盘，暂不开
         setBoolOption(lib, MaaGlobalOption.SAVE_ON_ERROR, debug)
+        debugSnapshotDir = logDir.takeIf { debug }
         Ln.i("MaaRunner: global options applied, logDir=$logDir debug=$debug")
     }
 
@@ -242,7 +246,15 @@ class MaaRunner(private val agentHost: AgentHost) {
                 }
                 val status = lib.MaaTaskerWait(currentTasker, taskId)
                 val success = status == MaaStatus.SUCCEEDED
-                if (!success) anyFailed = true
+                if (!success) {
+                    anyFailed = true
+                    debugSnapshotDir?.let { dir ->
+                        val safeName = task.taskName.replace(Regex("[^\\p{L}\\p{N}._-]+"), "_")
+                        val path = File(dir, "debug-controller-failure-$safeName.png").absolutePath
+                        if (saveCachedImage(path)) Ln.i("MaaRunner: failure snapshot saved: $path")
+                        else Ln.w("MaaRunner: failed to save failure snapshot: $path")
+                    }
+                }
                 notify { onTaskFinished(task.taskName, success, statusText(status)) }
 
                 // Stop 之后 Tasker 会把剩余任务直接判失败，这里提前收尾避免刷一串假失败
