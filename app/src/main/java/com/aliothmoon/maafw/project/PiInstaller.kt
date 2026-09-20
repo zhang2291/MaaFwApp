@@ -58,18 +58,20 @@ typealias PiUnpackProgress = (done: Int, total: Int, path: String) -> Unit
  * native MaaFramework 只认文件系统路径，而 APK 内的 assets 条目不是文件；落点不能用 filesDir——
  * 特权进程是 shell 身份，进不去 0700 的 app 私有目录（docs/privileged-runtime.md §9）
  *
- * 标记文件记 versionCode，与本次运行的不符即整体重解
+ * 标记文件默认记 versionCode；生产环境会额外带上 APK 的 lastUpdateTime。
+ * 这样同一个 versionCode 的 APK 被覆盖安装时，也会重新解包内置 PI，避免继续使用旧资源。
  * 解包只由 [PiInstallCoordinator] 发起；取路径的地方一律用 [installedDir]，别在读一个文件时
  * 顺带搬几十 MB
  */
 class PiInstaller(
     private val pkg: PiPackage,
-    private val versionCode: Int,
+    versionCode: Int,
+    private val installIdentity: String = versionCode.toString(),
 ) {
 
     /**
      * 已解包的 PI 根目录，本身不解包
-     * 就绪定义与 [ensureInstalled] 相同：目录在、标记与本次 versionCode 一致
+     * 就绪定义与 [ensureInstalled] 相同：目录在、标记与本次安装身份一致
      */
     fun installedDir(): File {
         val target = File(AppPaths.ROOT, AppFiles.PI_DIR)
@@ -80,7 +82,7 @@ class PiInstaller(
     }
 
     /**
-     * 标记与本次运行的 versionCode 一致就直接返回，否则整体重解
+     * 标记与本次安装身份一致就直接返回，否则整体重解
      * 阻塞 IO：调用方须在 IO 线程
      */
     @Synchronized
@@ -98,7 +100,7 @@ class PiInstaller(
 
     private fun isCurrentInstall(base: File, target: File): Boolean {
         val marker = File(base, PI_MARKER_NAME)
-        return target.isDirectory && marker.isFile && marker.readText().trim() == versionCode.toString()
+        return target.isDirectory && marker.isFile && marker.readText().trim() == installIdentity
     }
 
     private fun install(base: File, onProgress: PiUnpackProgress): File {
@@ -113,7 +115,7 @@ class PiInstaller(
         target.mkdirs()
         unpack(target, onProgress)
         ensureNoMedia(base)
-        marker.writeText(versionCode.toString())
+        marker.writeText(installIdentity)
         return target
     }
 
@@ -196,7 +198,7 @@ class PiInstaller(
     }
 
     companion object {
-        /** 提交标记：解包全部成功后才写，内容是出这个包时的 versionCode */
+        /** 提交标记：解包全部成功后才写，内容是本次安装身份 */
         const val PI_MARKER_NAME = "pi.version"
 
         /** 按内容指纹判过期的旧包留下的标记 */

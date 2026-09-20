@@ -14,9 +14,12 @@ import org.koin.dsl.module
 
 val projectModule = module {
     single {
+        val context = androidContext()
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         PiInstaller(
-            pkg = AssetPiPackage(androidContext()),
+            pkg = AssetPiPackage(context),
             versionCode = BuildConfig.VERSION_CODE,
+            installIdentity = "${BuildConfig.VERSION_CODE}:${packageInfo.lastUpdateTime}",
         )
     }
     single { PiInstallCoordinator(get()) }

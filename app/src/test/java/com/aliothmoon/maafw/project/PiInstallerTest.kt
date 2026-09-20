@@ -43,9 +43,14 @@ class PiInstallerTest {
         "resource/base/pipeline/x.json" to "{}",
     )
 
-    private fun installer(base: File, pkg: PiPackage, versionCode: Int): PiInstaller {
+    private fun installer(
+        base: File,
+        pkg: PiPackage,
+        versionCode: Int,
+        installIdentity: String = versionCode.toString(),
+    ): PiInstaller {
         every { AppPaths.ROOT } returns base
-        return PiInstaller(pkg, versionCode)
+        return PiInstaller(pkg, versionCode, installIdentity)
     }
 
     @Test
@@ -71,6 +76,19 @@ class PiInstallerTest {
         installer(base, pkg, 11).ensureInstalled()
 
         assertEquals("versionCode 未变不应重复解包", afterFirst, pkg.openCount)
+    }
+
+    @Test
+    fun `安装身份变化时即使 versionCode 相同也整体重解`() {
+        val base = temp.newFolder("external")
+        installer(base, MapPiPackage(files), 11, "11:100").ensureInstalled()
+
+        val updated = files - "tasks/a.json" + ("tasks/b.json" to "{}")
+        val root = installer(base, MapPiPackage(updated), 11, "11:200").ensureInstalled()
+
+        assertTrue(File(root, "tasks/b.json").isFile)
+        assertFalse("覆盖安装后的旧 PI 内容不该残留", File(root, "tasks/a.json").exists())
+        assertEquals("11:200", File(base, PiInstaller.PI_MARKER_NAME).readText())
     }
 
     @Test
