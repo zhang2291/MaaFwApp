@@ -448,6 +448,7 @@ fun AppRoot(
                         onIntent = viewModel::onIntent,
                         update = settingsState.update,
                         resourceUpdate = settingsState.resourceUpdate,
+                        onGachaRecords = { navController.navigate("gacha_records") },
                         onSettingsIntent = settingsViewModel::onIntent,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -532,6 +533,12 @@ fun AppRoot(
                 }
                 composable(Routes.SCHEDULE_TRIGGER_LOG) {
                     ScheduleTriggerLogScreen(onBack = { navController.popBackStack() })
+                }
+                composable("gacha_records") {
+                    com.aliothmoon.maafw.ui.gacha.GachaScreen(
+                        running = state.configurationLocked,
+                        onBack = { navController.popBackStack() },
+                    )
                 }
                 composable(Routes.RUN_LOG_ARCHIVE) {
                     RunLogArchiveScreen(

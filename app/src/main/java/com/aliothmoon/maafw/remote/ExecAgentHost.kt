@@ -65,6 +65,7 @@ class ExecAgentHost(
         // PI_* 先落地：MaaFramework 版本只有这一侧问得到，app 侧算不出来，在这里补齐最后一项
         request.piEnv.forEach { (key, value) -> builder.environment()[key] = value }
         maaFrameworkVersion()?.let { builder.environment()["PI_CLIENT_MAAFW_VERSION"] = it }
+        builder.environment()["MBCC_DATA_DIR"] = File(File(request.workingDir).parentFile, "data").absolutePath
         // 运行时描述后落地：那份是构建期人工写的，同名时按它来，留作本地调试的逃生舱
         entry.env.forEach { (key, value) ->
             builder.environment()[key] = value.resolveAgentPlaceholders(bundleDir, request.nativeLibraryDir)
