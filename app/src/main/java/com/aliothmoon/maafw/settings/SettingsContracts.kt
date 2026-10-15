@@ -19,6 +19,7 @@ import com.aliothmoon.maafw.update.UpdateSource
 data class SettingsUiState(
     val remoteAccess: RemoteAccessState = RemoteAccessState(),
     val update: UpdatePanelState = UpdatePanelState(),
+    val resourceUpdate: ResourceUpdatePanelState = ResourceUpdatePanelState(),
     val pipOnHome: Boolean = true,
 )
 
@@ -50,6 +51,20 @@ data class UpdatePanelState(
         get() = checkResult as? UpdateCheckResult.UpdateAvailable
 }
 
+data class ResourceUpdatePanelState(
+    val currentVersion: String? = null,
+    val latestVersion: String? = null,
+    val checking: Boolean = false,
+    val downloading: Boolean = false,
+    val downloadedBytes: Long = -1L,
+    val totalBytes: Long = -1L,
+    val statusMessage: UiText? = null,
+    val errorMessage: UiText? = null,
+) {
+    val updateAvailable: Boolean
+        get() = latestVersion != null && latestVersion != currentVersion
+}
+
 sealed interface SettingsIntent {
     /** 切换 Shizuku / Root 后端；落到 AppSettings.startupBackend 并断开当前特权进程 */
     data class SetBackend(val backend: RemoteBackend) : SettingsIntent
@@ -63,6 +78,9 @@ sealed interface SettingsIntent {
     data class SetAutoDownloadUpdate(val enabled: Boolean) : SettingsIntent
     data class SetPipOnHome(val enabled: Boolean) : SettingsIntent
     data object CheckUpdate : SettingsIntent
+    data object CheckResourceUpdate : SettingsIntent
+    data object DownloadResourceUpdate : SettingsIntent
+    data object CancelResourceDownload : SettingsIntent
     data object DownloadUpdate : SettingsIntent
     data object CancelDownload : SettingsIntent
     data object DismissUpdatePrompt : SettingsIntent

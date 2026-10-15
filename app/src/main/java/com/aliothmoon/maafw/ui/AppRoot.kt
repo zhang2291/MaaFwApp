@@ -447,6 +447,7 @@ fun AppRoot(
                         state = state,
                         onIntent = viewModel::onIntent,
                         update = settingsState.update,
+                        resourceUpdate = settingsState.resourceUpdate,
                         onSettingsIntent = settingsViewModel::onIntent,
                         modifier = Modifier.fillMaxSize(),
                     )

@@ -13,6 +13,10 @@ import com.aliothmoon.maafw.project.ProjectRepository
 import com.aliothmoon.maafw.project.ProjectState
 import com.aliothmoon.maafw.update.AndroidAbi
 import com.aliothmoon.maafw.update.OkHttpUpdateDownloader
+import com.aliothmoon.maafw.update.ResourceUpdateCheckResult
+import com.aliothmoon.maafw.update.ResourceUpdateInstallResult
+import com.aliothmoon.maafw.update.ResourceUpdateManifest
+import com.aliothmoon.maafw.update.ResourceUpdateService
 import com.aliothmoon.maafw.update.UpdateCheckFailure
 import com.aliothmoon.maafw.update.UpdateCheckRequest
 import com.aliothmoon.maafw.update.UpdateCheckResult
@@ -55,15 +59,21 @@ class SettingsViewModel(
     private val updateService: UpdateService,
     private val updateDownloader: OkHttpUpdateDownloader,
     private val apkInstaller: SystemApkInstaller,
+    private val resourceUpdateService: ResourceUpdateService? = null,
     private val currentVersion: String = BuildConfig.VERSION_NAME,
     supportedAbis: List<String> = Build.SUPPORTED_ABIS.orEmpty().toList(),
 ) : ViewModel() {
 
     private val abi = supportedAbis.firstNotNullOfOrNull(::androidAbi) ?: AndroidAbi.ANY
     private val updateOperation = MutableStateFlow(UpdatePanelState())
+    private val resourceOperation = MutableStateFlow(
+        ResourceUpdatePanelState(currentVersion = resourceUpdateService?.currentVersion()),
+    )
+    private var resourceManifest: ResourceUpdateManifest? = null
 
     /** 只在 CAS 抢到 downloading 位后登记，取消不会误伤没抢到位的空跑协程 */
     private var downloadJob: Job? = null
+    private var resourceDownloadJob: Job? = null
 
     init {
         viewModelScope.launch { startupUpdateCheck() }
@@ -107,9 +117,15 @@ class SettingsViewModel(
     val uiState: StateFlow<SettingsUiState> = combine(
         permissionGateway.state,
         updatePanel,
+        resourceOperation,
         appSettings.pipOnHome,
-    ) { remote, update, pipOnHome ->
-        SettingsUiState(remoteAccess = remote, update = update, pipOnHome = pipOnHome)
+    ) { remote, update, resourceUpdate, pipOnHome ->
+        SettingsUiState(
+            remoteAccess = remote,
+            update = update,
+            resourceUpdate = resourceUpdate,
+            pipOnHome = pipOnHome,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -153,8 +169,11 @@ class SettingsViewModel(
             }
 
             SettingsIntent.CheckUpdate -> viewModelScope.launch { checkUpdate() }
+            SettingsIntent.CheckResourceUpdate -> viewModelScope.launch { checkResourceUpdate() }
             SettingsIntent.DownloadUpdate -> viewModelScope.launch { downloadUpdate() }
+            SettingsIntent.DownloadResourceUpdate -> viewModelScope.launch { downloadResourceUpdate() }
             SettingsIntent.CancelDownload -> downloadJob?.cancel()
+            SettingsIntent.CancelResourceDownload -> resourceDownloadJob?.cancel()
             SettingsIntent.DismissUpdatePrompt -> updateOperation.update { it.copy(updatePrompt = null) }
             SettingsIntent.DismissUpdateError -> updateOperation.update { it.copy(errorPrompt = null) }
         }
@@ -227,11 +246,104 @@ class SettingsViewModel(
         }
     }
 
+    private suspend fun checkResourceUpdate() {
+        val service = resourceUpdateService ?: return
+        val current = resourceOperation.value
+        if (current.checking || current.downloading || updateOperation.value.downloading) return
+        resourceOperation.update {
+            it.copy(checking = true, statusMessage = null, errorMessage = null)
+        }
+        val metadata = projectRepository.state.filterIsInstance<ProjectState.Ready>()
+            .first().definition.metadata
+        when (val result = service.check(metadata.githubRepository)) {
+            is ResourceUpdateCheckResult.UpdateAvailable -> {
+                resourceManifest = result.manifest
+                resourceOperation.update {
+                    it.copy(
+                        checking = false,
+                        currentVersion = result.currentVersion,
+                        latestVersion = result.manifest.version,
+                        statusMessage = null,
+                        errorMessage = null,
+                    )
+                }
+            }
+
+            is ResourceUpdateCheckResult.UpToDate -> {
+                resourceManifest = result.manifest
+                resourceOperation.update {
+                    it.copy(
+                        checking = false,
+                        currentVersion = result.currentVersion,
+                        latestVersion = result.manifest.version,
+                        statusMessage = uiTextOf(R.string.settings_resource_update_up_to_date),
+                        errorMessage = null,
+                    )
+                }
+            }
+
+            is ResourceUpdateCheckResult.Failed -> {
+                resourceManifest = null
+                resourceOperation.update {
+                    it.copy(checking = false, statusMessage = null, errorMessage = result.message)
+                }
+            }
+        }
+    }
+
+    private suspend fun downloadResourceUpdate() {
+        val service = resourceUpdateService ?: return
+        val manifest = resourceManifest ?: return
+        val current = resourceOperation.value
+        if (!current.updateAvailable || current.checking || current.downloading || updateOperation.value.downloading) {
+            return
+        }
+        resourceOperation.update {
+            it.copy(
+                downloading = true,
+                downloadedBytes = -1L,
+                totalBytes = -1L,
+                statusMessage = null,
+                errorMessage = null,
+            )
+        }
+        resourceDownloadJob = coroutineContext.job
+        try {
+            when (val result = service.install(
+                manifest = manifest,
+                onProgress = { downloaded, total ->
+                    resourceOperation.update {
+                        it.copy(downloadedBytes = downloaded, totalBytes = total)
+                    }
+                },
+            )) {
+                is ResourceUpdateInstallResult.Installed -> resourceOperation.update {
+                    it.copy(
+                        currentVersion = result.version,
+                        latestVersion = result.version,
+                        downloading = false,
+                        statusMessage = uiTextOf(R.string.settings_resource_update_applied, result.version),
+                        errorMessage = null,
+                    )
+                }
+
+                is ResourceUpdateInstallResult.Failed -> resourceOperation.update {
+                    it.copy(downloading = false, errorMessage = result.message)
+                }
+            }
+        } catch (e: CancellationException) {
+            resourceOperation.update { it.copy(downloading = false) }
+            throw e
+        } finally {
+            resourceDownloadJob = null
+        }
+    }
+
     /** CAS 占 downloading 位；连点与启动自检/手动并发抢不到位就静默放弃 */
     private fun claimDownload(): UpdateCheckResult.UpdateAvailable? {
         val current = updateOperation.value
         val requested = current.availableUpdate ?: return null
-        if (current.checking || current.downloading) return null
+        if (current.checking || current.downloading || resourceOperation.value.downloading) return null
         val claimed = current.copy(
             downloading = true,
             downloadedBytes = -1L,
@@ -241,7 +353,8 @@ class SettingsViewModel(
         return if (updateOperation.compareAndSet(current, claimed)) requested else null
     }
 
-    private fun updateSettingsLocked(): Boolean = updateOperation.value.downloading
+    private fun updateSettingsLocked(): Boolean =
+        updateOperation.value.downloading || resourceOperation.value.downloading
 
     private suspend fun downloadUpdate() {
         // 二次触发（连点、启动自检与手动并发）不上错，CAS 抢不到位就静默快速返回

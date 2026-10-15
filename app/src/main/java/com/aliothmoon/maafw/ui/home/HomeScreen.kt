@@ -69,6 +69,7 @@ import com.aliothmoon.maafw.ui.components.MaaInfoRow
 import com.aliothmoon.maafw.ui.components.MaaLabeledControlRow
 import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
 import com.aliothmoon.maafw.ui.components.MaaSwitch
+import com.aliothmoon.maafw.settings.ResourceUpdatePanelState
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.UpdatePanelState
 import com.aliothmoon.maafw.ui.components.maaClickable
@@ -84,6 +85,7 @@ fun HomeScreen(
     state: SessionUiState,
     onIntent: (SessionIntent) -> Unit,
     update: UpdatePanelState,
+    resourceUpdate: ResourceUpdatePanelState,
     onSettingsIntent: (SettingsIntent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -123,7 +125,7 @@ fun HomeScreen(
                 ),
             verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
         ) {
-            OverviewCard(state, update, onSettingsIntent)
+            OverviewCard(state, update, resourceUpdate, onSettingsIntent)
             ResourceCard(state, onIntent)
             RunModeCard(state, onIntent)
             PermissionCard(state, onIntent)
@@ -137,6 +139,7 @@ fun HomeScreen(
 private fun OverviewCard(
     state: SessionUiState,
     update: UpdatePanelState,
+    resourceUpdate: ResourceUpdatePanelState,
     onSettingsIntent: (SettingsIntent) -> Unit,
 ) {
     // 分辨率展示用设备真实屏幕尺寸（Misc.getScreenSize），与前后台 / 虚拟屏偏好无关
@@ -155,6 +158,7 @@ private fun OverviewCard(
             trailing = { ServiceStatusIndicator(status = state.serviceStatus) },
         )
         UpdateSection(update, onSettingsIntent)
+        ResourceUpdateSection(resourceUpdate, onSettingsIntent)
     }
 }
 

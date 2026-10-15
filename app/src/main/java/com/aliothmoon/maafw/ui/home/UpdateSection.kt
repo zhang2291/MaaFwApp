@@ -27,6 +27,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.core.net.toUri
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.i18n.asString
+import com.aliothmoon.maafw.settings.ResourceUpdatePanelState
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.UpdatePanelState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
@@ -179,6 +181,107 @@ internal fun UpdateSection(
     }
     if (mirrorInfoVisible) {
         MirrorInfoDialog(onDismiss = { mirrorInfoVisible = false })
+    }
+}
+
+@Composable
+internal fun ResourceUpdateSection(
+    update: ResourceUpdatePanelState,
+    onSettingsIntent: (SettingsIntent) -> Unit,
+) {
+    HorizontalDivider(modifier = Modifier.fillMaxWidth())
+    Text(
+        text = stringResource(R.string.settings_resource_update_title),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    MaaInfoRow(
+        label = stringResource(R.string.settings_resource_version),
+        value = update.currentVersion ?: stringResource(R.string.settings_resource_version_builtin),
+    )
+    update.latestVersion?.takeIf { it != update.currentVersion }?.let { latest ->
+        MaaInfoRow(
+            label = stringResource(R.string.settings_resource_latest_version),
+            value = latest,
+        )
+    }
+    if (update.downloading) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+        ) {
+            if (update.totalBytes > 0) {
+                LinearProgressIndicator(
+                    progress = { update.downloadedBytes.coerceAtLeast(0L).toFloat() / update.totalBytes },
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "${update.downloadedBytes.coerceAtLeast(0L) * 100 / update.totalBytes}%",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                LinearProgressIndicator(modifier = Modifier.weight(1f))
+            }
+            IconButton(onClick = { onSettingsIntent(SettingsIntent.CancelResourceDownload) }) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.settings_update_cancel_download),
+                )
+            }
+        }
+    } else {
+        MaaOutlinedButton(
+            onClick = {
+                onSettingsIntent(
+                    if (update.updateAvailable) SettingsIntent.DownloadResourceUpdate
+                    else SettingsIntent.CheckResourceUpdate,
+                )
+            },
+            enabled = !update.checking,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.primary,
+            ),
+        ) {
+            if (update.checking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(MaaDesignTokens.IconSize.md),
+                    strokeWidth = MaaDesignTokens.Border.marker,
+                    color = LocalContentColor.current,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(MaaDesignTokens.IconSize.md),
+                )
+            }
+            Spacer(Modifier.width(MaaDesignTokens.Spacing.sm))
+            Text(
+                text = stringResource(
+                    when {
+                        update.checking -> R.string.settings_resource_update_checking
+                        update.updateAvailable -> R.string.settings_resource_update_download
+                        else -> R.string.settings_resource_update_check
+                    },
+                ),
+            )
+        }
+    }
+    update.statusMessage?.let {
+        Text(
+            text = it.asString(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    update.errorMessage?.let {
+        Text(
+            text = it.asString(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 
