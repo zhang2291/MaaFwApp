@@ -154,6 +154,7 @@ fun GachaScreen(
         }
         AlertDialog(onDismissRequest = { if (!busy) deleteTarget = null }, title = { Text("删除“${target.name}”？") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("该类型包含 ${groupedRecords[target.id].orEmpty().size} 条抽卡记录。")
                 Text("删除并备份：记录保留在备份目录。\n永久删除：清除当前记录和自动报告，无法撤销。")
                 if (deleteError.isNotEmpty()) Text(deleteError, color = MaterialTheme.colorScheme.error)
             } },
@@ -217,6 +218,14 @@ fun GachaScreen(
                     GachaChoice(if (stopOnKnown) "识别到已知停止" else "完整识别",
                         listOf("full" to "完整识别", "known" to "识别到已知停止"), if (stopOnKnown) "known" else "full",
                         enabled = !busy && !running, modifier = Modifier.weight(1f)) { stopOnKnown = it == "known" }
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(enabled = !busy && !running, onClick = {
+                        newName = ""; addError = ""; showAdd = true
+                    }) { Text("添加类型") }
+                    TextButton(enabled = !busy && !running && category != null, onClick = {
+                        deleteError = ""; deleteTarget = category
+                    }) { Text("删除类型", color = MaterialTheme.colorScheme.error) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     MaaButton(onClick = { if (!currentRunning && category != null) onStart(selectedId, stopOnKnown) },
