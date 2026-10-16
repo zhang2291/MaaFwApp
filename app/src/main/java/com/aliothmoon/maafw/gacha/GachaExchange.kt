@@ -9,7 +9,6 @@ import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import javax.xml.parsers.DocumentBuilderFactory
 
 /** Small OOXML interchange: text cells only, including upstream openpyxl exports. No formulas execute. */
 object GachaExchange {
@@ -65,17 +64,7 @@ object GachaExchange {
     private fun Element.elements(name: String): List<Element> = getElementsByTagNameNS("*", name)
         .let { nodes -> (0 until nodes.length).map { nodes.item(it) as Element } }
 
-    private fun parse(bytes: ByteArray): Element {
-        val factory = DocumentBuilderFactory.newInstance()
-        factory.isNamespaceAware = true
-        factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
-        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-        factory.isExpandEntityReferences = false
-        val builder = factory.newDocumentBuilder()
-        builder.setEntityResolver { _, _ -> org.xml.sax.InputSource(java.io.StringReader("")) }
-        require(!bytes.toString(Charsets.UTF_8).contains("<!DOCTYPE", true)) { "不支持含 DTD 的工作簿" }
-        return builder.parse(ByteArrayInputStream(bytes)).documentElement
-    }
+    private fun parse(bytes: ByteArray): Element = GachaXml.parse(bytes)
 
     private data class ParsedSheet(val name: String, val columns: Set<String>, val rows: List<Map<String, String>>)
 

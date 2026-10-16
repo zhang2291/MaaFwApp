@@ -408,7 +408,8 @@ object PiParser {
             controllers = obj.stringList("controller"),
             resources = obj.stringList("resource"),
         )
-        return when (val type = obj.string("type")) {
+        // PI defaults an omitted option type to select; explicit unknown types still fail.
+        return when (val type = obj.string("type") ?: "select") {
             "select", "switch" -> {
                 val cases = parseCases(source, name, obj, diagnostics, text)
                 val defaultCase = obj.string("default_case")?.also {
