@@ -54,6 +54,7 @@ data class SessionUiState(
     val environment: ResolvedEnvironment? = null,
     val sessionDiagnostics: List<Diagnostic> = emptyList(),
     val runner: RunnerState = RunnerState(),
+    val gachaCollecting: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.System,
     val themeStyle: ThemeStyle = ThemeStyle.DEFAULT,
     val debugMode: Boolean = false,
@@ -300,6 +301,10 @@ sealed interface SessionIntent {
      */
     data class Start(val surface: TaskSurface = TaskSurface.InApp) : SessionIntent
     data object Stop : SessionIntent
+    data class StartGachaCollection(val categoryId: String, val stopOnKnown: Boolean) : SessionIntent
+    data object StopGachaCollection : SessionIntent
+    data class ContinueForegroundGacha(val token: String) : SessionIntent
+    data class CancelForegroundGacha(val token: String) : SessionIntent
 
     /**
      * 预览 Surface 的生死；Surface 归 UI 所有，VM 只转发句柄
@@ -346,6 +351,7 @@ sealed interface SessionIntent {
 
 /** 一次性 Effect，不进 UiState */
 sealed interface SessionEffect {
+    data class ReturnToGameForGacha(val token: String) : SessionEffect
     data class ShowMessage(val message: UiText) : SessionEffect
     data class ShowDiagnostics(val diagnostics: List<Diagnostic>) : SessionEffect
 

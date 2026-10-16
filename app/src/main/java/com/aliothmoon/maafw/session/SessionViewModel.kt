@@ -119,6 +119,9 @@ class SessionViewModel(
     private val recorder: RunLogRecorder,
     private val piInstall: PiInstallCoordinator,
 ) : ViewModel() {
+    private val foregroundGacha = ForegroundGachaGate()
+    private var foregroundGachaTimeout: kotlinx.coroutines.Job? = null
+    internal fun isForegroundGachaPending(token: String): Boolean = foregroundGacha.pending.value?.token == token
 
     private val privilegedState: Flow<PrivilegedSnapshot> = combine(
         permissionGateway.state,
@@ -164,6 +167,8 @@ class SessionViewModel(
     }.flowOn(MaaDispatchers.Default) // resolve 属重计算，不占用主线程
         .combine(permissionGateway.watchdogState) { base, wd -> base.copy(watchdogState = wd) }
         .combine(piInstall.state) { base, install -> base.copy(piInstallState = install) }
+        .combine(runLauncher.gachaOwner) { base, owner -> base.copy(gachaCollecting = owner != null) }
+        .combine(foregroundGacha.pending) { base, pending -> base.copy(gachaCollecting = base.gachaCollecting || pending != null) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
@@ -289,9 +294,11 @@ class SessionViewModel(
             telemetryLockedByVersion = isDebugProjectVersion(project.definition.version),
             welcomePrompt = metadata.welcome
                 ?.takeIf { metadata.welcomeFingerprint != config.welcomeFingerprint },
-            configurationList = session.configurationList,
-            activeConfiguration = session.activeConfiguration,
-            taskCatalog = session.taskCatalog,
+            configurationList = session.configurationList.map { it.copy(tasks = it.tasks.filterNot { task -> task.taskName == "抽卡记录" }) },
+            activeConfiguration = session.activeConfiguration?.let { it.copy(tasks = it.tasks.filterNot { task -> task.taskName == "抽卡记录" }) },
+            taskCatalog = session.taskCatalog.mapNotNull { group ->
+                group.copy(tasks = group.tasks.filterNot { it.taskName == "抽卡记录" }).takeIf { it.tasks.isNotEmpty() }
+            },
             globalOptions = session.globalOptions,
             resourceOptions = session.resourceOptions,
             environment = session.environment,
@@ -518,7 +525,32 @@ class SessionViewModel(
             }
 
             is SessionIntent.Start -> start(intent.surface)
-            SessionIntent.Stop -> stop()
+            SessionIntent.Stop -> {
+                foregroundGacha.cancel()
+                foregroundGachaTimeout?.cancel()
+                if (runLauncher.gachaOwner.value != null) runLauncher.stopGacha() else stop()
+            }
+            is SessionIntent.StartGachaCollection -> viewModelScope.launch { startGacha(intent) }
+            SessionIntent.StopGachaCollection -> {
+                foregroundGacha.cancel()
+                foregroundGachaTimeout?.cancel()
+                runLauncher.stopGacha()
+            }
+            is SessionIntent.CancelForegroundGacha -> {
+                if (foregroundGacha.cancel(intent.token)) {
+                    foregroundGachaTimeout?.cancel()
+                    emitEffect(SessionEffect.ShowMessage(uiTextFromProject("未能切回游戏，已取消本次采集。")))
+                }
+            }
+            is SessionIntent.ContinueForegroundGacha -> {
+                val request = foregroundGacha.take(intent.token)
+                if (request != null) {
+                    foregroundGachaTimeout?.cancel()
+                    if (appSettings.runMode.value == RunMode.FOREGROUND) {
+                        viewModelScope.launch { start(TaskSurface.InApp, request, foregroundGachaConfirmed = true) }
+                    }
+                }
+            }
 
             // 不走 guarded：预览与配置写入无关，运行中反而更需要它
             is SessionIntent.AttachPreviewSurface -> previewPort.attachSurface(intent.surface)
@@ -671,12 +703,44 @@ class SessionViewModel(
      * 前台拦截分两层：这里拦应用内入口（前台模式没有应用内的预览环境），
      * ForegroundModePrecheck 拦定时（没人看着的那轮不占主屏）；悬浮窗手动放行
      */
-    private suspend fun start(surface: TaskSurface) {
-        if (surface == TaskSurface.InApp && appSettings.runMode.value == RunMode.FOREGROUND) {
+    private suspend fun startGacha(intent: SessionIntent.StartGachaCollection) {
+        if (runnerPort.state.value.phase.isBusy || runLauncher.gachaOwner.value != null || foregroundGacha.pending.value != null) return
+        val request = com.aliothmoon.maafw.runner.GachaCollectionRequest(intent.categoryId, intent.stopOnKnown)
+        if (appSettings.runMode.value != RunMode.FOREGROUND) {
+            start(TaskSurface.InApp, request)
+            return
+        }
+        val access = permissionGateway.state.value
+        if (permissionGateway.serviceState.value != PrivilegedServiceState.Connected || !access.isGranted(access.configuredBackend)) {
+            emitEffect(SessionEffect.ShowMessage(uiTextFromProject("请先在首页完成授权并连接服务，再打开游戏记录页。")))
+            return
+        }
+        if (request.categoryId == "legacy" || !Regex("[A-Za-z0-9][A-Za-z0-9_-]{0,79}").matches(request.categoryId)) return
+        val pending = foregroundGacha.reserve(request) ?: return
+        foregroundGachaTimeout = viewModelScope.launch {
+            kotlinx.coroutines.delay(10_000)
+            if (foregroundGacha.cancel(pending.token)) {
+                emitEffect(SessionEffect.ShowMessage(uiTextFromProject("切回游戏超时，已取消本次采集。")))
+            }
+        }
+        emitEffect(SessionEffect.ReturnToGameForGacha(pending.token))
+    }
+
+    private suspend fun start(surface: TaskSurface, gacha: com.aliothmoon.maafw.runner.GachaCollectionRequest? = null, foregroundGachaConfirmed: Boolean = false) {
+        if (surface == TaskSurface.InApp && appSettings.runMode.value == RunMode.FOREGROUND && !(gacha != null && foregroundGachaConfirmed)) {
             emitEffect(SessionEffect.ShowMessage(uiTextOf(R.string.runner_foreground_blocked)))
             return
         }
-        when (val result = runLauncher.launch(RunTrigger.Manual)) {
+        val launchResult = try {
+            runLauncher.launch(RunTrigger.Manual, gacha = gacha)
+        } catch (cancellation: kotlinx.coroutines.CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            if (gacha == null) throw error
+            emitEffect(SessionEffect.ShowMessage(uiTextFromProject(error.message ?: "抽卡采集启动失败")))
+            return
+        }
+        when (val result = launchResult) {
             // 手动发起不传 requestId，这条到不了
             RunLaunchResult.Started, RunLaunchResult.DuplicateRequest -> Unit
 

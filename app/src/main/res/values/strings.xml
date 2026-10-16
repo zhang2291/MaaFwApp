@@ -1,4 +1,5 @@
 <resources>
+    <string name="nav_gacha_records">抽卡记录</string>
     <string name="app_name">MaaFwApp</string>
 
     <!-- 通用 -->

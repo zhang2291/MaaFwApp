@@ -35,11 +35,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -127,6 +129,9 @@ import com.aliothmoon.maafw.ui.tasks.TasksScreen
 import com.aliothmoon.maafw.ui.tasks.rememberMovablePreview
 import com.aliothmoon.maafw.util.Misc
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -144,6 +149,7 @@ private enum class TopDestination(
 ) {
     Home(R.string.nav_home, Icons.Outlined.Home, Icons.Filled.Home),
     Tasks(R.string.nav_tasks, Icons.Outlined.Checklist, Icons.Filled.Checklist),
+    GachaRecords(R.string.nav_gacha_records, Icons.Outlined.History, Icons.Filled.History),
     Schedule(R.string.nav_schedule, Icons.Outlined.Schedule, Icons.Filled.Schedule),
     Settings(R.string.nav_settings, Icons.Outlined.Settings, Icons.Filled.Settings),
 }
@@ -251,6 +257,7 @@ fun AppRoot(
         var exportSheetVisible by remember { mutableStateOf(false) }
 
         val context = LocalContext.current
+        val gachaLifecycleOwner = LocalLifecycleOwner.current
         // 悬浮窗面板的「导出」：先把应用拉到前面，再由这条流打开 Activity 里的导出 sheet
         LaunchedEffect(overlayController) {
             overlayController.exportLogRequests.collect { exportSheetVisible = true }
@@ -262,6 +269,26 @@ fun AppRoot(
                     is SessionEffect.ShowMessage -> Unit
 
                     is SessionEffect.ShowDiagnostics -> diagnosticsDialog = effect.diagnostics
+                    is SessionEffect.ReturnToGameForGacha -> {
+                        val activity = context.findActivity()
+                        var continued = false
+                        try {
+                            if (activity != null && viewModel.isForegroundGachaPending(effect.token) &&
+                                runCatching { activity.moveTaskToBack(true) }.getOrDefault(false)) {
+                                val stopped = withTimeoutOrNull(6_000) {
+                                    gachaLifecycleOwner.lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.STARTED) }
+                                    delay(350)
+                                    gachaLifecycleOwner.lifecycle.currentState == Lifecycle.State.CREATED && !activity.isFinishing
+                                } == true
+                                if (stopped) {
+                                    viewModel.onIntent(SessionIntent.ContinueForegroundGacha(effect.token))
+                                    continued = true
+                                }
+                            }
+                        } finally {
+                            if (!continued) viewModel.onIntent(SessionIntent.CancelForegroundGacha(effect.token))
+                        }
+                    }
 
                     // 拉起外部 Activity 要 Context，只能落在 Route 层
                     SessionEffect.InstallShizuku -> ShizukuInstallHelper.installShizuku(context)
@@ -448,7 +475,6 @@ fun AppRoot(
                         onIntent = viewModel::onIntent,
                         update = settingsState.update,
                         resourceUpdate = settingsState.resourceUpdate,
-                        onGachaRecords = { navController.navigate("gacha_records") },
                         onSettingsIntent = settingsViewModel::onIntent,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -464,6 +490,15 @@ fun AppRoot(
                         onEnterFullscreen = { previewFullscreen = true },
                         onExportLogs = { exportSheetVisible = true },
                         onIntent = viewModel::onIntent,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    TopDestination.GachaRecords -> com.aliothmoon.maafw.ui.gacha.GachaScreen(
+                        running = state.configurationLocked || state.gachaCollecting,
+                        collecting = state.gachaCollecting,
+                        onStart = { categoryId, stopOnKnown ->
+                            viewModel.onIntent(SessionIntent.StartGachaCollection(categoryId, stopOnKnown))
+                        },
+                        onStop = { viewModel.onIntent(SessionIntent.StopGachaCollection) },
                         modifier = Modifier.fillMaxSize(),
                     )
                     TopDestination.Schedule -> ScheduleScreen(
@@ -533,12 +568,6 @@ fun AppRoot(
                 }
                 composable(Routes.SCHEDULE_TRIGGER_LOG) {
                     ScheduleTriggerLogScreen(onBack = { navController.popBackStack() })
-                }
-                composable("gacha_records") {
-                    com.aliothmoon.maafw.ui.gacha.GachaScreen(
-                        running = state.configurationLocked,
-                        onBack = { navController.popBackStack() },
-                    )
                 }
                 composable(Routes.RUN_LOG_ARCHIVE) {
                     RunLogArchiveScreen(

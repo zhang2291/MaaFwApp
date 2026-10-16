@@ -59,6 +59,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -569,6 +570,60 @@ class SessionViewModelTest {
                     it.message.isResource(R.string.runner_foreground_blocked)
             },
         )
+        assertEquals(RunnerPhase.Idle, runner.state.value.phase)
+    }
+
+    @Test
+    fun `foreground gacha never hides an unconnected app`() = runTest(mainDispatcher) {
+        val settings = FakeAppSettingsGateway().apply { runMode.value = RunMode.FOREGROUND }
+        val (vm, _, runner) = createVm(settings = settings)
+        val effects = mutableListOf<SessionEffect>()
+        backgroundScope.launch { vm.effects.collect { effects += it } }
+        vm.onIntent(SessionIntent.StartGachaCollection("default-0", false))
+        runCurrent()
+        assertTrue(effects.none { it is SessionEffect.ReturnToGameForGacha })
+        assertEquals(RunnerPhase.Idle, runner.state.value.phase)
+    }
+
+    @Test
+    fun `foreground gacha stop invalidates the queued return to game`() = runTest(mainDispatcher) {
+        val settings = FakeAppSettingsGateway().apply { runMode.value = RunMode.FOREGROUND }
+        val permissions = FakePermissionGateway().apply {
+            serviceState.value = PrivilegedServiceState.Connected
+            state.value = state.value.copy(shizukuAvailable = true, shizukuGranted = true)
+        }
+        val (vm, _, runner) = createVm(settings = settings, permissions = permissions)
+        val effects = mutableListOf<SessionEffect>()
+        backgroundScope.launch { vm.effects.collect { effects += it } }
+        vm.onIntent(SessionIntent.StartGachaCollection("default-0", false))
+        runCurrent()
+        val request = effects.filterIsInstance<SessionEffect.ReturnToGameForGacha>().single()
+        assertTrue(vm.isForegroundGachaPending(request.token))
+        assertEquals(RunnerPhase.Idle, runner.state.value.phase)
+        vm.onIntent(SessionIntent.StopGachaCollection)
+        runCurrent()
+        assertFalse(vm.isForegroundGachaPending(request.token))
+        vm.onIntent(SessionIntent.ContinueForegroundGacha(request.token))
+        runCurrent()
+        assertEquals(RunnerPhase.Idle, runner.state.value.phase)
+    }
+
+    @Test
+    fun `foreground gacha expires without lifecycle acknowledgement`() = runTest(mainDispatcher) {
+        val settings = FakeAppSettingsGateway().apply { runMode.value = RunMode.FOREGROUND }
+        val permissions = FakePermissionGateway().apply {
+            serviceState.value = PrivilegedServiceState.Connected
+            state.value = state.value.copy(shizukuAvailable = true, shizukuGranted = true)
+        }
+        val (vm, _, runner) = createVm(settings = settings, permissions = permissions)
+        val effects = mutableListOf<SessionEffect>()
+        backgroundScope.launch { vm.effects.collect { effects += it } }
+        vm.onIntent(SessionIntent.StartGachaCollection("default-0", false))
+        runCurrent()
+        val request = effects.filterIsInstance<SessionEffect.ReturnToGameForGacha>().single()
+        advanceTimeBy(10_001)
+        runCurrent()
+        assertFalse(vm.isForegroundGachaPending(request.token))
         assertEquals(RunnerPhase.Idle, runner.state.value.phase)
     }
 

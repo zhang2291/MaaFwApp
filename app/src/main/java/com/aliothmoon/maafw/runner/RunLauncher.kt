@@ -17,8 +17,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import com.aliothmoon.maafw.constant.AppPaths
+import com.aliothmoon.maafw.constant.AppFiles
+import java.io.File
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import timber.log.Timber
@@ -84,6 +91,7 @@ class RunLauncher(
     /** 收尾要守着整轮，活得比 launch 的调用方久 */
     private val scope: CoroutineScope,
     private val journal: RunJournal,
+    private val gachaPiRoot: () -> File = { File(AppPaths.ROOT, AppFiles.PI_DIR) },
 ) {
 
     /** 只护投递这一段，不护整轮；运行中的第二次 Start 由 RunnerPort 拒 */
@@ -94,6 +102,22 @@ class RunLauncher(
 
     /** 抢占时要撤掉上一轮的收尾登记，否则旧的自动熄屏会落到新一轮头上 */
     private val settling = AtomicReference<Job?>(null)
+
+    private val _gachaOwner = MutableStateFlow<RunConfigurationId?>(null)
+    val gachaOwner = _gachaOwner.asStateFlow()
+    private val gachaStarting = AtomicReference<Job?>(null)
+
+    /** Gate and unique ephemeral configuration ID prevent this control from stopping daily runs. */
+    suspend fun stopGacha(): RunnerCommandResult {
+        gachaStarting.get()?.cancel()
+        return gate.withLock {
+            val owner = _gachaOwner.value ?: return@withLock RunnerCommandResult.Accepted
+            if (runnerPort.state.value.activeExecution?.runConfigurationId != owner) {
+                return@withLock RunnerCommandResult.Accepted
+            }
+            runnerPort.stop()
+        }
+    }
 
     /**
      * @param configurationId null 跑当前激活的那份；定时规则可以指定别的
@@ -112,12 +136,23 @@ class RunLauncher(
         steps: RunStepSink? = null,
         signals: RunSignals = RunSignals(),
         progress: RunProgress = RunProgress { _, _ -> },
+        gacha: GachaCollectionRequest? = null,
     ): RunLaunchResult {
         if (!gate.tryLock()) {
             return RunLaunchResult.Blocked(uiTextOf(R.string.msg_launch_in_progress))
         }
         val engaged = ArrayDeque<Release>()
+        var gachaId: RunConfigurationId? = null
+        var dispatched = false
         try {
+            if (gacha != null && (runnerPort.state.value.phase.isBusy || _gachaOwner.value != null)) {
+                return RunLaunchResult.Blocked(uiTextOf(R.string.msg_launch_in_progress))
+            }
+            if (gacha != null) {
+                gachaId = RunConfigurationId("gacha:pending:" + java.util.UUID.randomUUID())
+                _gachaOwner.value = gachaId
+                gachaStarting.set(currentCoroutineContext()[Job])
+            }
             if (requestId != null && requestId in handled) {
                 Timber.i("duplicate run request, skipping: %s", requestId.value)
                 return RunLaunchResult.DuplicateRequest
@@ -131,9 +166,17 @@ class RunLauncher(
             if (configurationId != null && config.configuration(configurationId) == null) {
                 return RunLaunchResult.ConfigurationMissing
             }
-            val built = RunPlanBuilder.build(
+            val dailyConfig = config.copy(configurations = config.configurations.map { configuration ->
+                configuration.copy(tasks = configuration.tasks.filterNot { it.taskName == GachaRunPlanBuilder.TASK_NAME })
+            })
+            val built = if (gacha != null) withContext(com.aliothmoon.maafw.MaaDispatchers.IO) {
+                GachaRunPlanBuilder.build(
+                    project.definition, config, gacha, gachaPiRoot(),
+                    BuildConfig.VERSION_NAME, AppLocales.currentProjectTag(),
+                )
+            } else RunPlanBuilder.build(
                 project.definition,
-                config,
+                dailyConfig,
                 configurationId,
                 clientVersion = BuildConfig.VERSION_NAME,
                 clientLanguage = AppLocales.currentProjectTag(),
@@ -143,11 +186,15 @@ class RunLauncher(
                 is RunPlanResult.Invalid -> return RunLaunchResult.Invalid(built.diagnostics)
                 is RunPlanResult.Success -> built.plan
             }
+            if (gacha != null) {
+                gachaId = plan.runConfigurationId
+                _gachaOwner.value = gachaId
+            }
 
             val ctx = RunContext(trigger, runMode(), plan, acknowledged, signals, progress, journal)
             runPrechecks(ctx)?.let { return it }
 
-            if (force) preemptRunning()
+            if (force && gacha == null) preemptRunning()
 
             engage(Anchor.BeforeDispatch, ctx, engaged, steps)?.let { halt ->
                 finalize(engaged, halt.cause)
@@ -161,6 +208,7 @@ class RunLauncher(
                     return RunLaunchResult.Rejected(command.reason)
                 }
             }
+            dispatched = true
             requestId?.let(::remember)
 
             engage(Anchor.AfterAccepted, ctx, engaged, steps)?.let { halt ->
@@ -172,12 +220,29 @@ class RunLauncher(
             // 返回 Accepted 之前就置了 Preparing，屏障不会当场看到 Idle 就退
             val pending = engaged.toList()
             engaged.clear()
-            settling.set(scope.launch { awaitSettledThenFinalize(pending) })
+            val ownedGacha = gachaId
+            settling.set(scope.launch {
+                try { awaitSettledThenFinalize(pending) }
+                finally {
+                    if (ownedGacha != null && _gachaOwner.value == ownedGacha) _gachaOwner.value = null
+                }
+            })
             return RunLaunchResult.Started
         } catch (cancellation: CancellationException) {
+            if (gachaId != null && runnerPort.state.value.activeExecution?.runConfigurationId == gachaId) {
+                withContext(NonCancellable) { runnerPort.stop() }
+            }
             finalize(engaged, RunEndReason.NotRun(NotRunCause.Cancelled))
+            if (dispatched) gachaId?.let { owner ->
+                scope.launch {
+                    runnerPort.state.first { !it.phase.isBusy || it.activeExecution?.runConfigurationId != owner }
+                    if (_gachaOwner.value == owner) _gachaOwner.value = null
+                }
+            }
             throw cancellation
         } finally {
+            if (gachaId != null) gachaStarting.set(null)
+            if (!dispatched && gachaId != null && _gachaOwner.value == gachaId) _gachaOwner.value = null
             gate.unlock()
         }
     }

@@ -1,0 +1,170 @@
+package com.aliothmoon.maafw.gacha
+
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.junit.Assert.*
+import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.RandomAccessFile
+import java.nio.file.Files
+
+class GachaArchiveStoreTest {
+    private fun record(name: String = "角色", category: String? = "新角色", index: Int = 0, type: String = "活动"): GachaRecord {
+        val cells = listOf("2026-10-1510:00:00", "同名实际卡池", name)
+        return GachaRecord(index = index, key = GachaStore.key(cells), rarity = "狂", type = type, cells = cells, poolCategory = category)
+    }
+
+    private fun temporary(block: (File, GachaArchiveStore) -> Unit) {
+        val root = Files.createTempDirectory("gacha-archive-").toFile()
+        try { block(root, GachaArchiveStore(root)) } finally { root.deleteRecursively() }
+    }
+
+    private fun collected(root: File, categoryId: String, records: List<GachaRecord>, filename: String = "活动.jsonl"): File {
+        val directory = File(root, if (categoryId == "legacy") "record/抽卡记录" else "record/gacha/$categoryId")
+        directory.mkdirs()
+        return File(directory, filename).also { file ->
+            file.writeText(records.joinToString("", transform = { Json.encodeToString(it.copy(poolCategory = null, categoryId = null)) + "\n" }))
+        }
+    }
+
+    @Test fun defaultsAndLegacyKeepTrackingTypeSeparateAndNeverMigrateOldFiles() = temporary { root, store ->
+        val legacy = collected(root, "legacy", listOf(record(category = null, type = "常驻")))
+        val bytes = legacy.readBytes()
+        val snapshot = store.snapshot()
+        assertEquals(listOf("default-0", "default-1", "default-2", "default-3", "default-4", "legacy"), snapshot.categories.map { it.id })
+        assertEquals("未分类（旧记录）", snapshot.records.single().poolCategory)
+        assertEquals("legacy", snapshot.records.single().categoryId)
+        assertEquals("常驻", snapshot.records.single().type)
+        assertArrayEquals(bytes, legacy.readBytes())
+        assertEquals(1, GachaStore(root).read().size)
+        val catalog = Json.decodeFromString<List<GachaCategory>>(File(root, "gacha-categories.json").readText())
+        assertEquals(5, catalog.size)
+        assertFalse(catalog.any { it.id == "legacy" })
+    }
+
+    @Test fun allCategoryMergeIsIsolatedIdempotentAndPreservesEmptyTypes() = temporary { _, store ->
+        val same = record()
+        val incoming = GachaBundle(listOf("新角色", "限定", "自定义空类型"), listOf(same, same, same.copy(poolCategory = "限定")))
+        assertEquals(3, store.importAll(incoming))
+        assertEquals(0, store.importAll(incoming))
+        val snapshot = store.snapshot()
+        assertEquals(2, snapshot.records.count { it.poolCategory == "新角色" })
+        assertEquals(1, snapshot.records.count { it.poolCategory == "限定" })
+        assertNotNull(snapshot.categories.firstOrNull { it.name == "自定义空类型" })
+        assertTrue(snapshot.records.all { it.category == "活动" })
+        assertTrue(snapshot.records.filter { it.poolCategory == "新角色" }.all { it.categoryId == "default-0" })
+    }
+
+    @Test fun invalidLastRecordDoesNotPublishEarlierCategoriesOrCatalog() = temporary { root, store ->
+        store.snapshot()
+        val catalog = File(root, "gacha-categories.json").readBytes()
+        assertThrows(IllegalArgumentException::class.java) {
+            store.importAll(GachaBundle(listOf("新的空类型"), listOf(record(), record(category = "限定").copy(key = "wrong"))))
+        }
+        assertArrayEquals(catalog, File(root, "gacha-categories.json").readBytes())
+        assertTrue(store.snapshot().records.isEmpty())
+        assertFalse(File(root, "record/gacha/default-0/导入.jsonl").exists())
+    }
+
+    @Test fun damagedLastArchiveDoesNotPartiallyImportOtherCategory() = temporary { root, store ->
+        store.snapshot()
+        val first = collected(root, "default-0", listOf(record(index = 1)))
+        val before = first.readBytes()
+        val broken = File(root, "record/gacha/default-1/活动.jsonl")
+        broken.parentFile!!.mkdirs()
+        broken.writeText("not json\n")
+        assertThrows(IllegalStateException::class.java) {
+            store.importAll(GachaBundle(listOf("新角色", "限定"), listOf(record("新记录"), record(category = "限定"))))
+        }
+        assertArrayEquals(before, first.readBytes())
+        assertFalse(File(root, "record/gacha/default-0/导入.jsonl").exists())
+    }
+
+    @Test fun collectedFilesAreNeverRewrittenAndForeignIdsAreMatchedByName() = temporary { root, store ->
+        val original = collected(root, "default-0", listOf(record(index = 1)))
+        val before = original.readBytes()
+        assertEquals(1, store.importAll(GachaBundle(listOf("新角色"), listOf(record(index = 1), record("新增").copy(categoryId = "foreign-id")))))
+        assertArrayEquals(before, original.readBytes())
+        assertTrue(File(root, "record/gacha/default-0/导入.jsonl").isFile)
+        assertFalse(File(root, "record/gacha/foreign-id").exists())
+        assertTrue(store.snapshot().records.all { it.categoryId == "default-0" })
+    }
+
+    @Test fun bundleRoundtripPreservesSameSecondOrderAcrossFiles() = temporary { root, store ->
+        collected(root, "default-0", listOf(record("最新", index = 1), record("中间", index = 2)))
+        collected(root, "default-0", listOf(record("最旧", index = 3)), "导入.jsonl")
+        store.addCategory("空类型")
+        val bytes = ByteArrayOutputStream().also { GachaExchange.writeBundleExcel(store.bundle(), it) }.toByteArray()
+        val bundle = GachaExchange.readBundleExcel(ByteArrayInputStream(bytes))
+        assertEquals(listOf("最新", "中间", "最旧"), bundle.records.map { it.name })
+        val restoredRoot = Files.createTempDirectory("gacha-restored-").toFile()
+        try {
+            val restored = GachaArchiveStore(restoredRoot)
+            assertEquals(3, restored.importAll(bundle))
+            assertEquals(0, restored.importAll(bundle))
+            assertEquals(listOf("最新", "中间", "最旧"), restored.snapshot().records.sortedBy { it.index }.map { it.name })
+            assertTrue(restored.bundle().categories.contains("空类型"))
+            assertEquals(store.bundle().records.map { it.cells }.toSet(), restored.bundle().records.map { it.cells }.toSet())
+        } finally { restoredRoot.deleteRecursively() }
+    }
+
+    @Test fun backupDeletionPreservesCategoryAndRecordsAndPermanentDeletionRemovesExports() = temporary { root, store ->
+        val category = store.addCategory("自定义")
+        collected(root, category.id, listOf(record(category = category.name)))
+        val archive = File(root, "record/gacha/${category.id}")
+        File(archive.path + ".xlsx").writeText("xlsx")
+        File(archive.path + ".md").writeText("md")
+        val backup = File(store.deleteCategory(category.id, permanent = false)!!)
+        assertTrue(File(backup, "category.json").isFile)
+        assertTrue(File(backup, "records/活动.jsonl").isFile)
+        assertEquals("xlsx", File(backup, "records.xlsx").readText())
+        assertFalse(archive.exists())
+        assertFalse(store.snapshot().categories.any { it.id == category.id })
+        val second = store.addCategory("彻底删除")
+        collected(root, second.id, listOf(record(category = second.name)))
+        val secondArchive = File(root, "record/gacha/${second.id}")
+        File(secondArchive.path + ".md").writeText("report")
+        assertNull(store.deleteCategory(second.id, permanent = true))
+        assertFalse(secondArchive.exists())
+        assertFalse(File(secondArchive.path + ".md").exists())
+        assertFalse(root.listFiles().orEmpty().any { it.name.startsWith(".gacha-delete-") })
+    }
+
+    @Test fun legacyCanBeHiddenAndRestoredByBundleImport() = temporary { root, store ->
+        collected(root, "legacy", listOf(record(category = null)))
+        val bundle = store.bundle()
+        assertNotNull(store.deleteCategory("legacy", permanent = false))
+        assertFalse(store.snapshot().categories.any { it.id == "legacy" })
+        assertEquals(1, store.importAll(bundle))
+        assertTrue(store.snapshot().categories.any { it.id == "legacy" })
+        assertEquals(1, store.snapshot().records.size)
+    }
+
+    @Test fun cannotDeleteLastRegularCategoryOrEscapeThroughCatalog() = temporary { root, store ->
+        val categories = store.snapshot().categories.filter { it.id != "legacy" }
+        categories.drop(1).forEach { store.deleteCategory(it.id, permanent = true) }
+        assertThrows(IllegalArgumentException::class.java) { store.deleteCategory(categories.first().id, permanent = true) }
+        val catalog = File(root, "gacha-categories.json")
+        catalog.writeText("[{\"id\":\"../outside\",\"name\":\"坏路径\"}]")
+        assertThrows(IllegalArgumentException::class.java) { store.snapshot() }
+        assertThrows(IllegalArgumentException::class.java) { store.deleteCategory("../outside", permanent = true) }
+    }
+
+    @Test fun categoryValidationAndSharedFileLockPreventUnsafeMutation() = temporary { root, store ->
+        store.snapshot()
+        assertThrows(IllegalArgumentException::class.java) { store.addCategory("常驻") }
+        assertThrows(IllegalArgumentException::class.java) { store.addCategory("坏\n名称") }
+        assertThrows(IllegalArgumentException::class.java) {
+            store.importAll(GachaBundle(emptyList(), listOf(record().copy(categoryId = "../../outside"))))
+        }
+        RandomAccessFile(File(root, ".gacha.lock"), "rw").use { file ->
+            file.channel.lock().use {
+                assertThrows(IllegalStateException::class.java) { store.addCategory("锁定期间") }
+            }
+        }
+        assertFalse(store.snapshot().categories.any { it.name == "锁定期间" })
+        assertNotNull(store.addCategory("正常新增"))
+    }
+}

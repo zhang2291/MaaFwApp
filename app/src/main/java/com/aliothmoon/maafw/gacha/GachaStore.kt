@@ -15,6 +15,8 @@ data class GachaRecord(
     val rarity: String? = null,
     val type: String? = null,
     val cells: List<String>,
+    val poolCategory: String? = null,
+    val categoryId: String? = null,
 ) {
     val time: String get() = cells.firstOrNull().orEmpty().replace(Regex("^(\\d{4}-\\d{2}-\\d{2})(\\d{2}:)"), "$1 $2")
     val pool: String get() = cells.getOrNull(1).orEmpty()

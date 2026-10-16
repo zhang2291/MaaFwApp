@@ -88,7 +88,6 @@ fun HomeScreen(
     resourceUpdate: ResourceUpdatePanelState,
     onSettingsIntent: (SettingsIntent) -> Unit,
     modifier: Modifier = Modifier,
-    onGachaRecords: () -> Unit = {},
 ) {
     // 取 app 标签（profile 的 app.label）而非 PI 的 name：后者是 PI 自己的标识符，不是对外呈现的名字
     val context = LocalContext.current
@@ -127,7 +126,6 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
         ) {
             OverviewCard(state, update, resourceUpdate, onSettingsIntent)
-            MaaOutlinedButton(onClick = onGachaRecords, modifier = Modifier.fillMaxWidth()) { Text("抽卡记录 · 查看 / 导入 / 导出") }
             ResourceCard(state, onIntent)
             RunModeCard(state, onIntent)
             PermissionCard(state, onIntent)
