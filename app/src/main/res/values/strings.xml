@@ -725,4 +725,5 @@
     <string name="notification_err_gotify_scheme">Gotify 服务器地址要以 http:// 或 https:// 开头</string>
     <string name="notification_err_webhook_url_empty">Webhook 地址未填写</string>
     <string name="notification_err_webhook_body_empty">Webhook 请求体模板未填写</string>
+    <string name="nav_inventory">仓库</string>
 </resources>

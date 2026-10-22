@@ -122,6 +122,9 @@ class SessionViewModel(
     private val foregroundGacha = ForegroundGachaGate()
     private var foregroundGachaTimeout: kotlinx.coroutines.Job? = null
     internal fun isForegroundGachaPending(token: String): Boolean = foregroundGacha.pending.value?.token == token
+    private val foregroundInventory = ForegroundInventoryGate()
+    private var foregroundInventoryTimeout: kotlinx.coroutines.Job? = null
+    internal fun isForegroundInventoryPending(token: String): Boolean = foregroundInventory.pending.value?.token == token
 
     private val privilegedState: Flow<PrivilegedSnapshot> = combine(
         permissionGateway.state,
@@ -169,6 +172,8 @@ class SessionViewModel(
         .combine(piInstall.state) { base, install -> base.copy(piInstallState = install) }
         .combine(runLauncher.gachaOwner) { base, owner -> base.copy(gachaCollecting = owner != null) }
         .combine(foregroundGacha.pending) { base, pending -> base.copy(gachaCollecting = base.gachaCollecting || pending != null) }
+        .combine(runLauncher.inventoryOwner) { base, owner -> base.copy(inventoryCollecting = owner != null) }
+        .combine(foregroundInventory.pending) { base, pending -> base.copy(inventoryCollecting = base.inventoryCollecting || pending != null) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
@@ -294,10 +299,10 @@ class SessionViewModel(
             telemetryLockedByVersion = isDebugProjectVersion(project.definition.version),
             welcomePrompt = metadata.welcome
                 ?.takeIf { metadata.welcomeFingerprint != config.welcomeFingerprint },
-            configurationList = session.configurationList.map { it.copy(tasks = it.tasks.filterNot { task -> task.taskName == "抽卡记录" }) },
-            activeConfiguration = session.activeConfiguration?.let { it.copy(tasks = it.tasks.filterNot { task -> task.taskName == "抽卡记录" }) },
+            configurationList = session.configurationList.map { it.copy(tasks = it.tasks.filterNot { task -> task.taskName in setOf("抽卡记录", "仓库识别") }) },
+            activeConfiguration = session.activeConfiguration?.let { it.copy(tasks = it.tasks.filterNot { task -> task.taskName in setOf("抽卡记录", "仓库识别") }) },
             taskCatalog = session.taskCatalog.mapNotNull { group ->
-                group.copy(tasks = group.tasks.filterNot { it.taskName == "抽卡记录" }).takeIf { it.tasks.isNotEmpty() }
+                group.copy(tasks = group.tasks.filterNot { it.taskName in setOf("抽卡记录", "仓库识别") }).takeIf { it.tasks.isNotEmpty() }
             },
             globalOptions = session.globalOptions,
             resourceOptions = session.resourceOptions,
@@ -526,9 +531,11 @@ class SessionViewModel(
 
             is SessionIntent.Start -> start(intent.surface)
             SessionIntent.Stop -> {
+                foregroundInventory.cancel()
+                foregroundInventoryTimeout?.cancel()
                 foregroundGacha.cancel()
                 foregroundGachaTimeout?.cancel()
-                if (runLauncher.gachaOwner.value != null) runLauncher.stopGacha() else stop()
+                if (runLauncher.inventoryOwner.value != null) runLauncher.stopInventory() else if (runLauncher.gachaOwner.value != null) runLauncher.stopGacha() else stop()
             }
             is SessionIntent.StartGachaCollection -> viewModelScope.launch { startGacha(intent) }
             SessionIntent.StopGachaCollection -> {
@@ -548,6 +555,28 @@ class SessionViewModel(
                     foregroundGachaTimeout?.cancel()
                     if (appSettings.runMode.value == RunMode.FOREGROUND) {
                         viewModelScope.launch { start(TaskSurface.InApp, request, foregroundGachaConfirmed = true) }
+                    }
+                }
+            }
+
+            SessionIntent.StartInventoryCollection -> viewModelScope.launch { startInventory() }
+            SessionIntent.StopInventoryCollection -> {
+                foregroundInventory.cancel()
+                foregroundInventoryTimeout?.cancel()
+                runLauncher.stopInventory()
+            }
+            is SessionIntent.CancelForegroundInventory -> {
+                if (foregroundInventory.cancel(intent.token)) {
+                    foregroundInventoryTimeout?.cancel()
+                    emitEffect(SessionEffect.ShowMessage(uiTextFromProject("未能切回游戏，已取消本次采集。")))
+                }
+            }
+            is SessionIntent.ContinueForegroundInventory -> {
+                val request = foregroundInventory.take(intent.token)
+                if (request != null) {
+                    foregroundInventoryTimeout?.cancel()
+                    if (appSettings.runMode.value == RunMode.FOREGROUND) {
+                        viewModelScope.launch { start(TaskSurface.InApp, inventory = true, foregroundGachaConfirmed = true) }
                     }
                 }
             }
@@ -704,7 +733,7 @@ class SessionViewModel(
      * ForegroundModePrecheck 拦定时（没人看着的那轮不占主屏）；悬浮窗手动放行
      */
     private suspend fun startGacha(intent: SessionIntent.StartGachaCollection) {
-        if (runnerPort.state.value.phase.isBusy || runLauncher.gachaOwner.value != null || foregroundGacha.pending.value != null) return
+        if (runnerPort.state.value.phase.isBusy || runLauncher.gachaOwner.value != null || foregroundGacha.pending.value != null || runLauncher.inventoryOwner.value != null || foregroundInventory.pending.value != null) return
         val request = com.aliothmoon.maafw.runner.GachaCollectionRequest(intent.categoryId, intent.stopOnKnown)
         if (appSettings.runMode.value != RunMode.FOREGROUND) {
             start(TaskSurface.InApp, request)
@@ -726,18 +755,40 @@ class SessionViewModel(
         emitEffect(SessionEffect.ReturnToGameForGacha(pending.token))
     }
 
-    private suspend fun start(surface: TaskSurface, gacha: com.aliothmoon.maafw.runner.GachaCollectionRequest? = null, foregroundGachaConfirmed: Boolean = false) {
-        if (surface == TaskSurface.InApp && appSettings.runMode.value == RunMode.FOREGROUND && !(gacha != null && foregroundGachaConfirmed)) {
+    private suspend fun startInventory() {
+        if (runnerPort.state.value.phase.isBusy || runLauncher.gachaOwner.value != null || foregroundGacha.pending.value != null || runLauncher.inventoryOwner.value != null || foregroundInventory.pending.value != null) return
+        val request = Unit
+        if (appSettings.runMode.value != RunMode.FOREGROUND) {
+            start(TaskSurface.InApp, inventory = true)
+            return
+        }
+        val access = permissionGateway.state.value
+        if (permissionGateway.serviceState.value != PrivilegedServiceState.Connected || !access.isGranted(access.configuredBackend)) {
+            emitEffect(SessionEffect.ShowMessage(uiTextFromProject("请先在首页完成授权并连接服务，再打开游戏首页。")))
+            return
+        }
+        val pending = foregroundInventory.reserve(request) ?: return
+        foregroundInventoryTimeout = viewModelScope.launch {
+            kotlinx.coroutines.delay(10_000)
+            if (foregroundInventory.cancel(pending.token)) {
+                emitEffect(SessionEffect.ShowMessage(uiTextFromProject("切回游戏超时，已取消本次采集。")))
+            }
+        }
+        emitEffect(SessionEffect.ReturnToGameForInventory(pending.token))
+    }
+
+    private suspend fun start(surface: TaskSurface, gacha: com.aliothmoon.maafw.runner.GachaCollectionRequest? = null, foregroundGachaConfirmed: Boolean = false, inventory: Boolean = false) {
+        if (surface == TaskSurface.InApp && appSettings.runMode.value == RunMode.FOREGROUND && !((gacha != null || inventory) && foregroundGachaConfirmed)) {
             emitEffect(SessionEffect.ShowMessage(uiTextOf(R.string.runner_foreground_blocked)))
             return
         }
         val launchResult = try {
-            runLauncher.launch(RunTrigger.Manual, gacha = gacha)
+            runLauncher.launch(RunTrigger.Manual, gacha = gacha, inventory = inventory)
         } catch (cancellation: kotlinx.coroutines.CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            if (gacha == null) throw error
-            emitEffect(SessionEffect.ShowMessage(uiTextFromProject(error.message ?: "抽卡采集启动失败")))
+            if (gacha == null && !inventory) throw error
+            emitEffect(SessionEffect.ShowMessage(uiTextFromProject(error.message ?: "采集启动失败")))
             return
         }
         when (val result = launchResult) {

@@ -35,6 +35,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
@@ -150,6 +152,7 @@ private enum class TopDestination(
     Home(R.string.nav_home, Icons.Outlined.Home, Icons.Filled.Home),
     Tasks(R.string.nav_tasks, Icons.Outlined.Checklist, Icons.Filled.Checklist),
     GachaRecords(R.string.nav_gacha_records, Icons.Outlined.History, Icons.Filled.History),
+    Inventory(R.string.nav_inventory, Icons.Outlined.Inventory2, Icons.Filled.Inventory2),
     Schedule(R.string.nav_schedule, Icons.Outlined.Schedule, Icons.Filled.Schedule),
     Settings(R.string.nav_settings, Icons.Outlined.Settings, Icons.Filled.Settings),
 }
@@ -287,6 +290,26 @@ fun AppRoot(
                             }
                         } finally {
                             if (!continued) viewModel.onIntent(SessionIntent.CancelForegroundGacha(effect.token))
+                        }
+                    }
+                    is SessionEffect.ReturnToGameForInventory -> {
+                        val activity = context.findActivity()
+                        var continued = false
+                        try {
+                            if (activity != null && viewModel.isForegroundInventoryPending(effect.token) &&
+                                runCatching { activity.moveTaskToBack(true) }.getOrDefault(false)) {
+                                val stopped = withTimeoutOrNull(6_000) {
+                                    gachaLifecycleOwner.lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.STARTED) }
+                                    delay(350)
+                                    gachaLifecycleOwner.lifecycle.currentState == Lifecycle.State.CREATED && !activity.isFinishing
+                                } == true
+                                if (stopped) {
+                                    viewModel.onIntent(SessionIntent.ContinueForegroundInventory(effect.token))
+                                    continued = true
+                                }
+                            }
+                        } finally {
+                            if (!continued) viewModel.onIntent(SessionIntent.CancelForegroundInventory(effect.token))
                         }
                     }
 
@@ -492,8 +515,15 @@ fun AppRoot(
                         onIntent = viewModel::onIntent,
                         modifier = Modifier.fillMaxSize(),
                     )
+                    TopDestination.Inventory -> com.aliothmoon.maafw.ui.inventory.InventoryScreen(
+                        running = state.configurationLocked || state.gachaCollecting || state.inventoryCollecting,
+                        collecting = state.inventoryCollecting,
+                        onStart = { viewModel.onIntent(SessionIntent.StartInventoryCollection) },
+                        onStop = { viewModel.onIntent(SessionIntent.StopInventoryCollection) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
                     TopDestination.GachaRecords -> com.aliothmoon.maafw.ui.gacha.GachaScreen(
-                        running = state.configurationLocked || state.gachaCollecting,
+                        running = state.configurationLocked || state.gachaCollecting || state.inventoryCollecting,
                         collecting = state.gachaCollecting,
                         onStart = { categoryId, stopOnKnown ->
                             viewModel.onIntent(SessionIntent.StartGachaCollection(categoryId, stopOnKnown))
