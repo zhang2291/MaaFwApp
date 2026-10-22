@@ -8,6 +8,9 @@ import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.bundling.Zip
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.register
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 /**
  * The chain that syncs the external PI project into a single archive; apply after
@@ -31,6 +34,7 @@ class PiAssetsConventionPlugin : Plugin<Project> {
             val syncPiAssets = tasks.register<Sync>("syncPiAssets") {
                 group = "build"
                 description = "Sync the configured PI project into the generated PI tree"
+                inputs.property("stampResourceVersion", profile.stampResourceVersion)
                 into(piDir)
                 if (assetsSourceDir != null) {
                     from(assetsSourceDir) {
@@ -48,6 +52,18 @@ class PiAssetsConventionPlugin : Plugin<Project> {
                     // A package without a PI ends up in ProjectState.Error at runtime
                     doFirst {
                         logger.warn("no PI configured (pi.profile in local.properties or PI_PROFILE), the build output will not contain a PI")
+                    }
+                }
+                doLast {
+                    val root = piDir.get().asFile
+                    if (profile.stampResourceVersion && root.resolve("interface.json").isFile) {
+                        // 内置资源也需要版本基准，否则旧远端清单会覆盖新 APK 的资源。
+                        // 仅资源重新同步时生成，增量构建复用标记；与发布清单统一使用 UTC。
+                        val marker = root.resolve(".resource-version")
+                        if (!marker.isFile) {
+                            marker.writeText(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+                                .withZone(ZoneOffset.UTC).format(Instant.now()) + "\n")
+                        }
                     }
                 }
             }

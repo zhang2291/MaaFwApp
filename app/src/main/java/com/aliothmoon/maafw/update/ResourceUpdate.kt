@@ -106,6 +106,9 @@ class ResourceUpdateService(
         }
         val manifest = ResourceUpdateManifest(version, downloadUrl, sha256)
         val current = currentVersion()
+        if (isOlderResource(version, current)) {
+            return ResourceUpdateCheckResult.Failed(uiTextOf(R.string.resource_update_older_than_installed))
+        }
         if (current == version) {
             ResourceUpdateCheckResult.UpToDate(manifest, current)
         } else {
@@ -122,6 +125,10 @@ class ResourceUpdateService(
         manifest: ResourceUpdateManifest,
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ): ResourceUpdateInstallResult = try {
+        // 检查后可能已有较新的资源装入；下载入口也防止旧清单回退本地资源。
+        if (isOlderResource(manifest.version, currentVersion())) {
+            return ResourceUpdateInstallResult.Failed(uiTextOf(R.string.resource_update_older_than_installed))
+        }
         val archive = withContext(MaaDispatchers.IO) {
             downloadArchive(manifest, onProgress)
         }
@@ -301,6 +308,13 @@ class ResourceUpdateService(
 
     private fun manifestUrl(repository: String): String =
         "https://raw.githubusercontent.com/$repository/$MANIFEST_BRANCH/$MANIFEST_FILE"
+
+    private fun isOlderResource(remote: String, current: String?): Boolean {
+        // 兼容现有 yyyyMMdd-HHmmss 发布版本以及语义版本；无版本标记的旧 APK 仍可升级。
+        val installed = current?.let(UpdateVersion::parse) ?: return false
+        val available = UpdateVersion.parse(remote) ?: return false
+        return available < installed
+    }
 
     private fun normalizeDigest(raw: String?): String? {
         val value = raw?.trim().orEmpty().removePrefix("sha256:").lowercase(Locale.US)

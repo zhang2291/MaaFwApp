@@ -52,6 +52,7 @@ data class UpdatePanelState(
 }
 
 data class ResourceUpdatePanelState(
+    val repository: String? = null,
     val currentVersion: String? = null,
     val latestVersion: String? = null,
     val checking: Boolean = false,

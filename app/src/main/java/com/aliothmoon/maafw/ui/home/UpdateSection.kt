@@ -199,6 +199,12 @@ internal fun ResourceUpdateSection(
         label = stringResource(R.string.settings_resource_version),
         value = update.currentVersion ?: stringResource(R.string.settings_resource_version_builtin),
     )
+    update.repository?.let { repository ->
+        MaaInfoRow(
+            label = stringResource(R.string.settings_resource_repository),
+            value = "GitHub · $repository",
+        )
+    }
     update.latestVersion?.takeIf { it != update.currentVersion }?.let { latest ->
         MaaInfoRow(
             label = stringResource(R.string.settings_resource_latest_version),

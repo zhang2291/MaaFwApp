@@ -67,6 +67,8 @@ internal data class BuildProfile(
     val appIcon: File?,
     /** Wins over the PI's own mirrorchyan_rid: the packager knows where this build is published */
     val mirrorchyanRid: String?,
+    /** Only timestamp-based resource publishers should enable this. */
+    val stampResourceVersion: Boolean = false,
 )
 
 /** Nothing configured at all: the package ships without a PI, see the soft failure on syncPiAssets */
@@ -128,6 +130,7 @@ private fun File.readProfile(): BuildProfile {
         appLabel = app?.text("label"),
         appIcon = app?.text("icon")?.let { base.resolvePath(it) },
         mirrorchyanRid = update?.text("mirrorchyanRid")?.requireMirrorchyanRid(),
+        stampResourceVersion = update?.text("stampResourceVersion")?.toBooleanStrict() ?: false,
     )
 }
 

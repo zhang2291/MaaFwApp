@@ -117,7 +117,9 @@ class SettingsViewModel(
     val uiState: StateFlow<SettingsUiState> = combine(
         permissionGateway.state,
         updatePanel,
-        resourceOperation,
+        resourceOperation.combine(projectRepository.state) { operation, project ->
+            operation.copy(repository = (project as? ProjectState.Ready)?.definition?.metadata?.githubRepository)
+        },
         appSettings.pipOnHome,
     ) { remote, update, resourceUpdate, pipOnHome ->
         SettingsUiState(
