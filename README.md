@@ -55,7 +55,7 @@ MBCCtools 配方通过 `update.stampResourceVersion: true` 在打包 PI 时生�
 停止按钮只停止本页发起的任务，不会停止抽卡采集或日常任务。
 
 页面读取 `data/inventory/latest.json`，不修改 Agent 档案。部分结果、未知数量和数量冲突会保留提示，
-没有识别出的库存不会显示为零。支持按分类/箱子/未识别截图筛选、搜索及系统文件选择器导出 JSON 或 Markdown。
+没有识别出的库存不会显示为零。所有物品在自适应紧凑格子中混排，不按类别分区；支持名称搜索及系统文件选择器导出 JSON 或 Markdown，未识别和冲突提示保留。
 图标从资源包仓库目录加载，未知截图仅允许读取当前应用 `data/inventory/captures` 内文件。
 
 ## 更新上游
