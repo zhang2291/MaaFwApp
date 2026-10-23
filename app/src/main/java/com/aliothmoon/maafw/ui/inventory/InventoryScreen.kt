@@ -121,18 +121,21 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
             if (data != null) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(if (data.status == "complete") "识别完成" else "部分识别 · 未识别不代表没有库存", style = MaterialTheme.typography.titleMedium)
                         val capturedAt = runCatching {
                             java.time.OffsetDateTime.parse(data.capturedAt).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                         }.getOrDefault(data.capturedAt)
-                        Text("采集时间：$capturedAt", style = MaterialTheme.typography.bodySmall)
+                        Text("更新于 $capturedAt", style = MaterialTheme.typography.bodySmall)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("异方晶", "狄斯币", "搜索令", "都市搜索令").forEach { name ->
                                 val item = data.items.firstOrNull { it.name == name }
                                 val quantity = if (name in data.currencies) data.currencies[name]?.toString() ?: "未识别" else item?.quantityText ?: "未识别"
+                                // Display-only conversion; the snapshot and exports retain the raw amount.
+                                val displayQuantity = if (name == "异方晶") {
+                                    data.currencies[name]?.let { "$it / ${it / 180}" } ?: "未识别 / —"
+                                } else quantity
                                 ElevatedCard { Column(Modifier.padding(12.dp)) {
-                                    Text(name, style = MaterialTheme.typography.labelMedium)
-                                    Text(quantity, style = MaterialTheme.typography.titleMedium)
+                                    Text(if (name == "异方晶") "异方晶 / 抽数" else name, style = MaterialTheme.typography.labelMedium)
+                                    Text(displayQuantity, style = MaterialTheme.typography.titleMedium)
                                 } }
                             }
                         }
