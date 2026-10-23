@@ -5,8 +5,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.MoreVert
@@ -20,6 +22,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import com.aliothmoon.maafw.constant.AppFiles
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.inventory.*
@@ -39,7 +43,6 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf("全部") }
     var menu by remember { mutableStateOf(false) }
 
     fun action(block: suspend () -> Unit) {
@@ -55,7 +58,6 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
     fun refresh() = action {
         val loaded = withContext(Dispatchers.IO) { store.load() }
         snapshot = loaded
-        if (category != "全部" && loaded?.items.orEmpty().none { it.group == category }) category = "全部"
         message = if (loaded == null) "暂无仓库记录，请先打开游戏首页，再开始识别。" else ""
     }
     LaunchedEffect(collecting) { if (!collecting) refresh() }
@@ -81,9 +83,8 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
         }
     }
     val data = snapshot
-    val groups = listOf("全部") + data?.items.orEmpty().map { it.group }.distinct()
     val filtered = data?.items.orEmpty().filter {
-        (category == "全部" || it.group == category) && (query.isBlank() || it.name.contains(query, true))
+        query.isBlank() || it.name.contains(query, true)
     }
     Column(modifier) {
         TopAppBar(title = { Text("仓库资源") }, windowInsets = WindowInsets(0, 0, 0, 0), actions = {
@@ -98,56 +99,58 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
                 }
             }
         })
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onStart, enabled = !running && !busy) { Text("开始识别") }
-                    if (collecting) OutlinedButton(onClick = onStop) { Text("停止识别") }
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(100.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Controls and summary span the screen; all inventory items share one adaptive grid.
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onStart, enabled = !running && !busy) { Text("开始识别") }
+                        if (collecting) OutlinedButton(onClick = onStop) { Text("停止识别") }
+                    }
+                    Text(if (collecting) "正在识别仓库，结束后自动刷新。" else "从游戏首页开始，只截图和滚动，不使用物品。", style = MaterialTheme.typography.bodySmall)
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                    if (message.isNotBlank()) Text(message, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium)
                 }
-                Text(if (collecting) "正在识别仓库，结束后自动刷新。" else "从游戏首页开始，只截图和滚动，不使用物品。", style = MaterialTheme.typography.bodySmall)
-                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-                if (message.isNotBlank()) Text(message, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium)
             }
             if (data != null) {
-                item {
-                    Text(if (data.status == "complete") "识别完成" else "部分识别 · 未识别不代表没有库存", style = MaterialTheme.typography.titleMedium)
-                    val capturedAt = runCatching {
-                        java.time.OffsetDateTime.parse(data.capturedAt).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    }.getOrDefault(data.capturedAt)
-                    Text("采集时间：$capturedAt", style = MaterialTheme.typography.bodySmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("异方晶", "狄斯币", "搜索令", "都市搜索令").forEach { name ->
-                            val item = data.items.firstOrNull { it.name == name }
-                            val quantity = if (name in data.currencies) data.currencies[name]?.toString() ?: "未识别" else item?.quantityText ?: "未识别"
-                            ElevatedCard { Column(Modifier.padding(12.dp)) {
-                                Text(name, style = MaterialTheme.typography.labelMedium)
-                                Text(quantity, style = MaterialTheme.typography.titleMedium)
-                            } }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(if (data.status == "complete") "识别完成" else "部分识别 · 未识别不代表没有库存", style = MaterialTheme.typography.titleMedium)
+                        val capturedAt = runCatching {
+                            java.time.OffsetDateTime.parse(data.capturedAt).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                        }.getOrDefault(data.capturedAt)
+                        Text("采集时间：$capturedAt", style = MaterialTheme.typography.bodySmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("异方晶", "狄斯币", "搜索令", "都市搜索令").forEach { name ->
+                                val item = data.items.firstOrNull { it.name == name }
+                                val quantity = if (name in data.currencies) data.currencies[name]?.toString() ?: "未识别" else item?.quantityText ?: "未识别"
+                                ElevatedCard { Column(Modifier.padding(12.dp)) {
+                                    Text(name, style = MaterialTheme.typography.labelMedium)
+                                    Text(quantity, style = MaterialTheme.typography.titleMedium)
+                                } }
+                            }
                         }
                     }
                 }
-                item {
-                    data.categories.forEach {
-                        Text("${it.name}：${if (it.status == "complete") "完整" else "部分"} · ${it.reason}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    listOf("道具", "消耗品").filter { name -> data.categories.none { it.name == name } }.forEach {
-                        Text("$it：本轮尚未识别", style = MaterialTheme.typography.bodySmall)
-                    }
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("搜索物品") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        groups.forEach { group -> FilterChip(selected = group == category, onClick = { category = group }, label = { Text(group) }) }
-                    }
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
-                items(filtered, key = { "${it.category}:${it.id}" }) { item -> InventoryRow(item) }
-                if (filtered.isEmpty()) item { Text("没有匹配的物品") }
+                items(filtered, key = { "${it.category}:${it.id}" }) { item -> InventoryCell(item) }
+                if (filtered.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("没有匹配的物品") }
             }
         }
     }
 }
 
 @Composable
-private fun InventoryRow(item: InventoryItem) {
+private fun InventoryCell(item: InventoryItem) {
     val bitmap by produceState<ImageBitmap?>(null, item.image) {
         value = withContext(Dispatchers.IO) {
             runCatching {
@@ -161,14 +164,28 @@ private fun InventoryRow(item: InventoryItem) {
         }
     }
     OutlinedCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             bitmap?.let { Image(it, null, Modifier.size(48.dp)) }
-                ?: Icon(Icons.Outlined.Inventory2, null, Modifier.size(40.dp))
-            Column(Modifier.weight(1f)) {
-                Text(item.name, style = MaterialTheme.typography.bodyLarge)
-                Text(item.category, style = MaterialTheme.typography.labelSmall)
-            }
-            Text(item.quantityText, modifier = Modifier.widthIn(max = 120.dp), style = MaterialTheme.typography.titleMedium)
+                ?: Icon(Icons.Outlined.Inventory2, null, Modifier.size(48.dp))
+            Text(
+                text = if (item.unknown) "未识别 · ${item.id.substringAfterLast(':').take(6)}" else item.name,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Quantity has no height/line cap: conflicts must remain readable in narrow cells.
+            Text(
+                text = item.quantityText,
+                style = if (item.conflicts.isEmpty()) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
