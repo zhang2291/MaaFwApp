@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,7 +20,6 @@ fun ToolsScreen(
     modifier: Modifier = Modifier,
     isActivePage: Boolean = true,
     inventory: @Composable () -> Unit,
-    gacha: @Composable () -> Unit,
 ) {
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     val holder = rememberSaveableStateHolder()
@@ -30,7 +28,6 @@ fun ToolsScreen(
         if (selected == null) {
             TopAppBar(title = { Text("小工具") }, windowInsets = WindowInsets(0, 0, 0, 0))
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ToolCard("抽卡记录", "识别、导入和查看抽卡统计", Icons.Outlined.History) { selected = "gacha" }
                 ToolCard("仓库资源", "查看物品数量，选择历史快照对比变化", Icons.Outlined.Inventory2) { selected = "inventory" }
             }
         } else {
@@ -41,7 +38,7 @@ fun ToolsScreen(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 holder.SaveableStateProvider(selected!!) {
-                    if (selected == "inventory") inventory() else gacha()
+                    inventory()
                 }
             }
         }
