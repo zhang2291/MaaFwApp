@@ -18,6 +18,8 @@ import com.aliothmoon.maafw.project.FakeProjectRepository
 import com.aliothmoon.maafw.project.ProjectState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
@@ -327,6 +329,40 @@ class RunLauncherTest {
 
         assertTrue(result is RunLaunchResult.Rejected)
         assertEquals(listOf("engage:env", "release:env"), log)
+        assertEquals(RunEndReason.NotRun(NotRunCause.Rejected), hook.releaseReason)
+    }
+
+    @Test
+    fun `preparation failure releases the new real outcome for result notification`() = runTest(testDispatcher) {
+        val failure = ExecutionResult.Failed(uiTextOf(R.string.msg_fail_default))
+        val runner = object : RunnerPort {
+            override val state = MutableStateFlow(RunnerState())
+            override val events = emptyFlow<RunnerEvent>()
+            override suspend fun start(plan: RunPlan): RunnerCommandResult {
+                state.value = RunnerState(latestResult = failure)
+                return RunnerCommandResult.Rejected(failure.reason)
+            }
+            override suspend fun stop() = RunnerCommandResult.Accepted
+        }
+        val hook = RecordingHook("notification", Anchor.BeforeDispatch)
+        val launcher = launcher(backgroundScope, runner, hooks = listOf(hook))
+
+        assertTrue(launcher.launch(RunTrigger.Manual) is RunLaunchResult.Rejected)
+        assertEquals(RunEndReason.Ran(failure), hook.releaseReason)
+    }
+
+    @Test
+    fun `rejection without a new outcome must not notify the previous completed run again`() = runTest(testDispatcher) {
+        val runner = object : RunnerPort {
+            override val state = MutableStateFlow(RunnerState(latestResult = ExecutionResult.Completed(emptyList())))
+            override val events = emptyFlow<RunnerEvent>()
+            override suspend fun start(plan: RunPlan) = RunnerCommandResult.Rejected(uiTextOf(R.string.msg_fail_default))
+            override suspend fun stop() = RunnerCommandResult.Accepted
+        }
+        val hook = RecordingHook("notification", Anchor.BeforeDispatch)
+        val launcher = launcher(backgroundScope, runner, hooks = listOf(hook))
+
+        assertTrue(launcher.launch(RunTrigger.Manual) is RunLaunchResult.Rejected)
         assertEquals(RunEndReason.NotRun(NotRunCause.Rejected), hook.releaseReason)
     }
 

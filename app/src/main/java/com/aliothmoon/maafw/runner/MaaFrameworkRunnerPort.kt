@@ -174,6 +174,7 @@ class MaaFrameworkRunnerPort(
                 val results = execution.taskResults + result
                 current.copy(
                     activeExecution = execution.copy(
+                        currentTaskName = null,
                         completedTaskCount = results.size,
                         taskResults = results,
                     ),
@@ -182,16 +183,20 @@ class MaaFrameworkRunnerPort(
         }
 
         override fun onFinished(outcome: Int, reason: String?) {
-            val results = _state.value.activeExecution?.taskResults.orEmpty()
-            val result = when (outcome) {
-                RunOutcome.COMPLETED -> ExecutionResult.Completed(results)
-                RunOutcome.COMPLETED_WITH_FAILURES -> ExecutionResult.CompletedWithFailures(results)
-                RunOutcome.CANCELLED -> ExecutionResult.Cancelled(results)
-                else -> ExecutionResult.Failed(if (reason.isNullOrBlank()) uiTextOf(R.string.msg_fail_default) else uiTextFromFramework(reason), results)
-            }
-            _state.value = RunnerState(phase = RunnerPhase.Idle, latestResult = result)
+            finishRun(outcome, reason)
         }
     } }
+
+    internal fun finishRun(outcome: Int, reason: String?) {
+        val results = _state.value.activeExecution?.taskResults.orEmpty()
+        val result = when (outcome) {
+            RunOutcome.COMPLETED -> ExecutionResult.Completed(results)
+            RunOutcome.COMPLETED_WITH_FAILURES -> ExecutionResult.CompletedWithFailures(results)
+            RunOutcome.CANCELLED -> ExecutionResult.Cancelled(results)
+            else -> ExecutionResult.Failed(if (reason.isNullOrBlank()) uiTextOf(R.string.msg_fail_default) else uiTextFromFramework(reason), results)
+        }
+        _state.value = RunnerState(phase = RunnerPhase.Idle, latestResult = result)
+    }
 
     override suspend fun start(plan: RunPlan): RunnerCommandResult {
         if (_state.value.phase.isBusy) {
@@ -225,13 +230,10 @@ class MaaFrameworkRunnerPort(
                         current
                     }
                 }
-                if (accepted.phase == RunnerPhase.Idle) {
-                    RunnerCommandResult.Rejected(
-                        accepted.latestResult.let { result ->
-                            (result as? ExecutionResult.Failed)?.reason
-                                ?: uiTextOf(R.string.msg_fail_default)
-                        },
-                    )
+                // 极短的一轮可能在 startRun 返回前已经结束，成功/取消不能被改报成启动失败。
+                val failure = accepted.latestResult as? ExecutionResult.Failed
+                if (accepted.phase == RunnerPhase.Idle && failure != null) {
+                    RunnerCommandResult.Rejected(failure.reason)
                 } else {
                     RunnerCommandResult.Accepted
                 }

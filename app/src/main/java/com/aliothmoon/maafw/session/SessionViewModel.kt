@@ -49,6 +49,7 @@ import com.aliothmoon.maafw.i18n.uiTextFormatted
 import com.aliothmoon.maafw.i18n.uiTextFromProject
 import com.aliothmoon.maafw.i18n.uiTextOf
 import com.aliothmoon.maafw.ui.i18n.diagnosticsSummaryUiText
+import com.aliothmoon.maafw.ui.i18n.asUiText
 import com.aliothmoon.maafw.settings.AppSettingsGateway
 import com.aliothmoon.maafw.telemetry.isDebugProjectVersion
 import com.aliothmoon.maafw.MaaDispatchers
@@ -63,6 +64,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -193,6 +195,9 @@ class SessionViewModel(
      * Activity 一重建日志就没了，定时触发更是压根没有 VM
      */
     val runLog: StateFlow<List<RunLogEntry>> = recorder.runLog
+
+    /** 当前阶段只作文字展示；节点数量不是任务内部可计算的总进度。 */
+    val runStatus: StateFlow<String?> = recorder.liveUpdateStatus
 
     private val _effects = MutableSharedFlow<SessionEffect>(
         extraBufferCapacity = 64,
@@ -793,7 +798,12 @@ class SessionViewModel(
         }
         when (val result = launchResult) {
             // 手动发起不传 requestId，这条到不了
-            RunLaunchResult.Started, RunLaunchResult.DuplicateRequest -> Unit
+            RunLaunchResult.Started -> viewModelScope.launch {
+                // 启动只代表已受理；等真实终态再提示，取消和启动后失败各用自己的结果。
+                val settled = runnerPort.state.first { !it.phase.isBusy }
+                settled.latestResult?.let { emitEffect(SessionEffect.ShowMessage(it.asUiText())) }
+            }
+            RunLaunchResult.DuplicateRequest -> Unit
 
             RunLaunchResult.ProjectNotReady ->
                 emitEffect(SessionEffect.ShowMessage(uiTextOf(R.string.msg_project_not_loaded)))

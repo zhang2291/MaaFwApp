@@ -38,14 +38,16 @@ class NotificationCenter(
      * 只开了「完成」的用户在任务挂掉那轮反而收不到任何东西
      */
     suspend fun onRunFinished(reason: RunEndReason) {
-        // 没投出去 / 用户自己按的停：都不是要播报的结局
+        // 没投出去不播报；已运行后取消仍需明确告知停止结果。
         val result = (reason as? RunEndReason.Ran)?.result ?: return
-        if (result is ExecutionResult.Cancelled) return
 
         val outcome = describe(result)
         val title = renderText(outcome.title)
         val body = renderText(outcome.body)
         eventNotifier.notifyRunFinished(title, body, outcome.isError)
+
+        // 主动停止只做本机反馈，不额外触发远端的完成/失败推送。
+        if (result is ExecutionResult.Cancelled) return
 
         val current = settings.current()
         val wanted = when (outcome.trigger) {
@@ -113,8 +115,12 @@ class NotificationCenter(
                 trigger = Trigger.ERROR,
             )
 
-            // 调用方已经挡掉，这里只为让 when 穷尽
-            is ExecutionResult.Cancelled -> error("cancelled runs are not reported")
+            is ExecutionResult.Cancelled -> Outcome(
+                title = uiTextOf(R.string.result_cancelled),
+                body = uiTextOf(R.string.result_cancelled),
+                isError = false,
+                trigger = Trigger.COMPLETE,
+            )
         }
     }
 

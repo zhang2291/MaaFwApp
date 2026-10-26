@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,8 +24,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.i18n.asString
+import com.aliothmoon.maafw.notification.RunProgressSnapshots
 import com.aliothmoon.maafw.runner.RunLogEntry
 import com.aliothmoon.maafw.runner.RunnerPhase
+import com.aliothmoon.maafw.runner.RunnerState
+import com.aliothmoon.maafw.runner.ExecutionResult
 import com.aliothmoon.maafw.runner.isBusy
 import com.aliothmoon.maafw.session.SessionIntent
 import com.aliothmoon.maafw.session.SessionUiState
@@ -33,6 +38,7 @@ import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.maaClickable
 import com.aliothmoon.maafw.ui.tasks.RunLogPanel
+import com.aliothmoon.maafw.ui.i18n.asUiText
 import kotlinx.coroutines.launch
 
 /**
@@ -50,6 +56,7 @@ fun OverlayPanel(
     onExportLog: () -> Unit,
     onLockToggle: (Boolean) -> Unit,
     onHide: () -> Unit,
+    statusText: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { OverlayPanelTab.entries.size }
@@ -76,6 +83,7 @@ fun OverlayPanel(
                 onLockToggle = onLockToggle,
                 onBackToApp = onBackToApp,
             )
+            OverlayRunStatus(state.runner, statusText)
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -138,6 +146,61 @@ fun OverlayPanel(
                     }
                 }
             }
+        }
+    }
+}
+
+/** 保留终态直到下一轮开始，避免任务结束后面板只剩「空闲」而看不到失败原因。 */
+@Composable
+private fun OverlayRunStatus(runner: RunnerState, statusText: String?) {
+    val result = runner.latestResult
+    if (!runner.phase.isBusy && result == null) return
+    Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs)) {
+        if (runner.phase.isBusy) {
+            val execution = runner.activeExecution
+            val snapshot = RunProgressSnapshots.from(runner.phase, execution, statusText)
+            Text(
+                text = runner.phase.asUiText().asString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = if ((execution?.totalTaskCount ?: 0) > 0) {
+                    stringResource(
+                        R.string.runner_finished_tasks,
+                        execution?.completedTaskCount ?: 0,
+                        execution?.totalTaskCount ?: 0,
+                    )
+                } else {
+                    stringResource(R.string.runner_finished_tasks_unknown, execution?.completedTaskCount ?: 0)
+                },
+                style = MaterialTheme.typography.labelSmall,
+            )
+            execution?.currentTaskLabel?.let { task ->
+                Text(task, style = MaterialTheme.typography.labelSmall)
+            }
+            statusText?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
+                ?.takeIf { it != execution?.currentTaskLabel }?.let { status ->
+                    Text(status, style = MaterialTheme.typography.labelSmall, maxLines = 2)
+                }
+            if (snapshot.indeterminate) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(
+                    progress = { snapshot.progress.toFloat() / RunProgressSnapshots.PROGRESS_MAX },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        } else if (result != null) {
+            Text(
+                text = result.asUiText().asString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (result is ExecutionResult.Failed || result is ExecutionResult.CompletedWithFailures) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+            )
         }
     }
 }

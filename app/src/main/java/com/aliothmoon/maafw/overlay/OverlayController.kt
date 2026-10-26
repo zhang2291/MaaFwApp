@@ -201,6 +201,7 @@ class OverlayController(
                 // 那样收不到运行态变化，再显示出来就是过期数据
                 val state by sessionViewModel.uiState.collectAsState()
                 val logEntries by sessionViewModel.runLog.collectAsState()
+                val runStatus by sessionViewModel.runStatus.collectAsState()
                 val locked by isPanelLocked.collectAsState()
                 OverlayPanel(
                     state = state,
@@ -211,6 +212,7 @@ class OverlayController(
                     onExportLog = ::requestExportLog,
                     onLockToggle = { setPanelLocked(it) },
                     onHide = ::onPanelClosed,
+                    statusText = runStatus,
                 )
             }
         }

@@ -149,4 +149,51 @@ class MaaFrameworkRunnerPortTest {
         assertEquals(RunnerPhase.Idle, runner.state.value.phase)
         assertTrue(runner.state.value.latestResult is ExecutionResult.Failed)
     }
+
+    @Test
+    fun `completion before startRun returns is still accepted`() = runTest(dispatcher) {
+        lateinit var runner: MaaFrameworkRunnerPort
+        val service = object : FakePrivilegedService() {
+            override fun startRun(runPlanJson: String?): Boolean {
+                runner.finishRun(RunOutcome.COMPLETED, null)
+                return true
+            }
+        }
+        runner = port(this, service).first
+
+        assertEquals(RunnerCommandResult.Accepted, runner.start(plan()))
+        assertTrue(runner.state.value.latestResult is ExecutionResult.Completed)
+        assertEquals(RunnerPhase.Idle, runner.state.value.phase)
+    }
+
+    @Test
+    fun `agent failure before startRun returns keeps the actual reason`() = runTest(dispatcher) {
+        lateinit var runner: MaaFrameworkRunnerPort
+        val service = object : FakePrivilegedService() {
+            override fun startRun(runPlanJson: String?): Boolean {
+                runner.finishRun(RunOutcome.FAILED, "agent exited: No module named PIL")
+                return true
+            }
+        }
+        runner = port(this, service).first
+
+        val result = runner.start(plan()) as RunnerCommandResult.Rejected
+        assertEquals(com.aliothmoon.maafw.i18n.uiTextFromFramework("agent exited: No module named PIL"), result.reason)
+        assertEquals(result.reason, (runner.state.value.latestResult as ExecutionResult.Failed).reason)
+    }
+
+    @Test
+    fun `cancellation before startRun returns is accepted rather than reported as failed`() = runTest(dispatcher) {
+        lateinit var runner: MaaFrameworkRunnerPort
+        val service = object : FakePrivilegedService() {
+            override fun startRun(runPlanJson: String?): Boolean {
+                runner.finishRun(RunOutcome.CANCELLED, null)
+                return true
+            }
+        }
+        runner = port(this, service).first
+
+        assertEquals(RunnerCommandResult.Accepted, runner.start(plan()))
+        assertTrue(runner.state.value.latestResult is ExecutionResult.Cancelled)
+    }
 }

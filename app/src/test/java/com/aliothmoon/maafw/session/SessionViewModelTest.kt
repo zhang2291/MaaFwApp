@@ -49,6 +49,13 @@ import com.aliothmoon.maafw.runner.isEssential
 import com.aliothmoon.maafw.runner.RunnerEvent
 import com.aliothmoon.maafw.runner.RunnerPhase
 import com.aliothmoon.maafw.runner.RunnerPort
+import com.aliothmoon.maafw.runner.RunnerState
+import com.aliothmoon.maafw.runner.RunPlan
+import com.aliothmoon.maafw.runner.RunnerCommandResult
+import com.aliothmoon.maafw.runner.ExecutionResult
+import com.aliothmoon.maafw.ui.i18n.asUiText
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import com.aliothmoon.maafw.runner.StubRunnerPort
 import com.aliothmoon.maafw.runner.StubRunnerScenario
 import com.aliothmoon.maafw.runner.isBusy
@@ -92,6 +99,38 @@ class SessionViewModelTest {
 
     private val mainDispatcher = UnconfinedTestDispatcher()
     private val emptyJson = JsonObject(emptyMap())
+
+    @Test
+    fun `accepted manual runs show the actual terminal result once`() = runTest(mainDispatcher) {
+        val outcomes = listOf(
+            ExecutionResult.Completed(emptyList()),
+            ExecutionResult.Cancelled(emptyList()),
+            ExecutionResult.Failed(com.aliothmoon.maafw.i18n.uiTextOf(R.string.msg_fail_default)),
+        )
+        for (outcome in outcomes) {
+            val runner = object : RunnerPort {
+                override val state = MutableStateFlow(RunnerState())
+                override val events = emptyFlow<RunnerEvent>()
+                override suspend fun start(plan: RunPlan): RunnerCommandResult {
+                    state.value = RunnerState(phase = RunnerPhase.Running)
+                    return RunnerCommandResult.Accepted
+                }
+                override suspend fun stop() = RunnerCommandResult.Accepted
+            }
+            val vm = createVmWithRunner(runner)
+            val effects = mutableListOf<SessionEffect>()
+            val collector = backgroundScope.launch { vm.effects.collect { effects += it } }
+            vm.onIntent(SessionIntent.Start())
+            runCurrent()
+            assertTrue(effects.filterIsInstance<SessionEffect.ShowMessage>().isEmpty())
+
+            runner.state.value = RunnerState(latestResult = outcome)
+            runCurrent()
+
+            assertEquals(listOf(outcome.asUiText()), effects.filterIsInstance<SessionEffect.ShowMessage>().map { it.message })
+            collector.cancel()
+        }
+    }
 
     private val definition = ProjectDefinition(
         name = "demo",

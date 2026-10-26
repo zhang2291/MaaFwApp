@@ -221,10 +221,15 @@ class RunLauncher(
                 return RunLaunchResult.Blocked(halt.reason)
             }
 
+            val previousResult = runnerPort.state.value.latestResult
             when (val command = runnerPort.start(plan)) {
                 RunnerCommandResult.Accepted -> Unit
                 is RunnerCommandResult.Rejected -> {
-                    finalize(engaged, RunEndReason.NotRun(NotRunCause.Rejected))
+                    // Preparing 失败或 agent 早退已产生本轮终态，也必须进入结果通知/日志收尾。
+                    // 已在运行而被拒时不得拿上一轮结果冒充这次结果。
+                    val result = runnerPort.state.value.takeIf { !it.phase.isBusy }
+                        ?.latestResult?.takeIf { it !== previousResult }
+                    finalize(engaged, result?.let { RunEndReason.Ran(it) } ?: RunEndReason.NotRun(NotRunCause.Rejected))
                     return RunLaunchResult.Rejected(command.reason)
                 }
             }

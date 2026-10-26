@@ -40,7 +40,7 @@ object RunProgressSnapshots {
     ): RunProgressSnapshot {
         val title = titleOf(phase)
         val total = execution?.totalTaskCount ?: 0
-        val done = execution?.completedTaskCount?.coerceIn(0, total) ?: 0
+        val done = execution?.completedTaskCount?.coerceIn(0, total.coerceAtLeast(0)) ?: 0
         val indeterminate = phase == RunnerPhase.Preparing || total <= 0
         val progressLabel = "$done/$total".takeIf { total > 0 }
         val taskLabel = execution?.currentTaskLabel
@@ -56,7 +56,7 @@ object RunProgressSnapshots {
             progress = if (indeterminate) {
                 0
             } else {
-                progressValue(done, total, hasCurrentTask = !execution?.currentTaskName.isNullOrBlank())
+                progressValue(done, total)
             },
             indeterminate = indeterminate,
             barColor = BAR_COLOR,
@@ -64,15 +64,12 @@ object RunProgressSnapshots {
     }
 
     /**
-     * 做完 [done] 个、总数 [total]；正在跑下一条时再加半格
-     *
-     * 半格只是条子位置，文案仍是 `done/total`。没有当前任务名就停在已完成的格上
+     * 只计已结束的顶层任务。节点/OCR 回调没有可知总量，不能用它们估算任务内部百分比。
      */
-    internal fun progressValue(done: Int, total: Int, hasCurrentTask: Boolean): Int {
+    internal fun progressValue(done: Int, total: Int): Int {
         if (total <= 0) return 0
         val finished = done.coerceIn(0, total)
-        val units = if (hasCurrentTask && finished < total) finished * 2L + 1 else finished * 2L
-        return (units * PROGRESS_MAX / (total * 2L)).toInt()
+        return (finished.toLong() * PROGRESS_MAX / total).toInt()
     }
 
     private fun titleOf(phase: RunnerPhase): RunProgressTitle = when (phase) {

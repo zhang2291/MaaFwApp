@@ -52,4 +52,42 @@ class InventoryStoreTest {
         write("data/inventory/latest.json", """{"version":2,"categories":{}}""")
         assertThrows(IllegalArgumentException::class.java) { store().load() }
     }
+
+    @Test fun `history enumerates only direct valid snapshots and preserves partial readings`() {
+        val partial = """{"version":1,"run_id":"20261022-233930-182857","captured_at":"2026-10-22T23:39:30+08:00",
+          "status":"partial","currencies":{"异方晶":null},"categories":{"道具":{"status":"partial","reason":"用户停止",
+          "items":{"ticket":{"name":"搜索令","quantity":null}}}}}"""
+        write("data/inventory/history/20261022-233930-182857.json", partial)
+        write("data/inventory/history/nested/hidden.json", partial)
+        write("data/inventory/history/broken.json", "{broken")
+        write("data/inventory/history/future.json", """{"version":2,"categories":{}}""")
+        write("data/inventory/history/ignored.txt", partial)
+        assertEquals(listOf("20261022-233930-182857.json"), store().history().map { it.fileName })
+        val loaded = store().loadHistory("20261022-233930-182857.json")
+        assertEquals("20261022-233930-182857", loaded.runId)
+        assertEquals("partial", loaded.status)
+        assertNull(loaded.currencies["异方晶"])
+        assertNull(loaded.items.single().quantity)
+        assertEquals("用户停止", loaded.categories.single().reason)
+    }
+
+    @Test fun `history rejects traversal absolute paths and nested files`() {
+        val outside = write("outside.json", """{"version":1,"categories":{}}""")
+        write("data/inventory/history/nested/hidden.json", outside.readText())
+        listOf("../../../outside.json", outside.absolutePath, "nested/hidden.json", "..\\outside.json").forEach { path ->
+            assertThrows(IllegalStateException::class.java) { store().loadHistory(path) }
+        }
+    }
+
+    @Test fun `agent absolute captures remain limited to inventory captures directory`() {
+        val capture = write("data/inventory/captures/run/unknown.png", "image")
+        val outside = write("data/inventory/history/private.png", "private")
+        fun jsonPath(file: File) = file.absolutePath.replace("\\", "\\\\")
+        write("data/inventory/latest.json", """{"version":1,"categories":{"道具":{"unknown":{
+          "good":{"quantity":3,"image":"${jsonPath(capture)}"},
+          "bad":{"quantity":3,"image":"${jsonPath(outside)}"}}}}}""")
+        val items = store().load()!!.items
+        assertEquals(capture.canonicalFile, items.first().image)
+        assertNull(items.last().image)
+    }
 }

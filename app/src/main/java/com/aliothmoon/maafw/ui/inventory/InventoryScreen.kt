@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -44,6 +46,9 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
     var message by remember { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf<List<InventoryHistoryEntry>?>(null) }
+    var baseline by remember { mutableStateOf<InventorySnapshot?>(null) }
+    var showUnchanged by rememberSaveable { mutableStateOf(false) }
 
     fun action(block: suspend () -> Unit) {
         if (busy) return
@@ -85,6 +90,38 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
     val data = snapshot
     val filtered = data?.items.orEmpty().filter {
         query.isBlank() || it.name.contains(query, true)
+    }
+    val previous = baseline
+    val comparison = remember(previous, data) {
+        if (previous != null && data != null) InventoryComparison.compare(previous, data) else emptyList()
+    }.filter { (showUnchanged || it.delta != 0L) && (query.isBlank() || it.name.contains(query, true)) }
+
+    history?.let { entries ->
+        AlertDialog(
+            onDismissRequest = { history = null },
+            title = { Text("选择历史快照") },
+            text = {
+                if (entries.isEmpty()) Text("暂无可对比的历史快照，请先完成另一次仓库识别。")
+                else LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                    listItems(entries, key = { it.fileName }) { entry ->
+                        TextButton(enabled = !busy, onClick = {
+                            action {
+                                baseline = withContext(Dispatchers.IO) { store.loadHistory(entry.fileName) }
+                                showUnchanged = false
+                                history = null
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(formatCapturedAt(entry.capturedAt))
+                                Text(if (entry.status == "complete") "完整快照" else "部分识别快照",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { history = null }) { Text("取消") } },
+        )
     }
     Column(modifier) {
         TopAppBar(title = { Text("仓库资源") }, windowInsets = WindowInsets(0, 0, 0, 0), actions = {
@@ -139,14 +176,48 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
                                 } }
                             }
                         }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(enabled = !busy && !collecting, onClick = {
+                                action {
+                                    history = withContext(Dispatchers.IO) { store.history() }
+                                        .filter { data.runId.isBlank() || it.fileName != "${data.runId}.json" }
+                                }
+                            }) { Text(if (previous == null) "对比历史快照" else "更换历史快照") }
+                            if (previous != null) TextButton(onClick = { baseline = null }) { Text("关闭对比") }
+                        }
                     }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("搜索物品") },
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
-                items(filtered, key = { "${it.category}:${it.id}" }) { item -> InventoryCell(item) }
-                if (filtered.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("没有匹配的物品") }
+                if (previous != null) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        OutlinedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("与历史快照对比", style = MaterialTheme.typography.titleMedium)
+                                Text("历史：${formatCapturedAt(previous.capturedAt)}", style = MaterialTheme.typography.bodySmall)
+                                Text("当前：${formatCapturedAt(data.capturedAt)}", style = MaterialTheme.typography.bodySmall)
+                                Text("变化 = 当前 − 历史；缺失、未知和冲突不按 0 计算。", style = MaterialTheme.typography.bodySmall)
+                                if (previous.status != "complete" || data.status != "complete") {
+                                    Text("包含部分识别快照，仅比较两侧已确认的数量。", style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(onClick = { showUnchanged = !showUnchanged }) {
+                                    Text(if (showUnchanged) "隐藏未变化物品" else "显示未变化物品")
+                                }
+                            }
+                        }
+                    }
+                    items(comparison, key = { it.key }, span = { GridItemSpan(maxLineSpan) }) { row ->
+                        InventoryChangeRow(row)
+                    }
+                    if (comparison.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(if (query.isBlank()) "已确认物品没有数量变化" else "没有匹配的变化记录")
+                    }
+                } else {
+                    items(filtered, key = { "${it.category}:${it.id}" }) { item -> InventoryCell(item) }
+                    if (filtered.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("没有匹配的物品") }
+                }
             }
         }
     }
@@ -189,6 +260,26 @@ private fun InventoryCell(item: InventoryItem) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
+
+private fun formatCapturedAt(value: String): String = runCatching {
+    java.time.OffsetDateTime.parse(value).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+}.getOrDefault(value)
+
+@Composable
+private fun InventoryChangeRow(row: InventoryComparisonRow) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(row.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text(row.deltaText, style = MaterialTheme.typography.titleSmall,
+                    color = if (row.delta == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+            }
+            Text("历史 ${row.previousText} → 当前 ${row.currentText}", style = MaterialTheme.typography.bodySmall)
+            if (row.reason.isNotBlank()) Text(row.reason, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

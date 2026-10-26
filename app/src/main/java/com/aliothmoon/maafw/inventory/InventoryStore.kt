@@ -18,6 +18,7 @@ data class InventoryCategory(val name: String, val status: String, val reason: S
 data class InventorySnapshot(
     val capturedAt: String, val status: String, val currencies: Map<String, Long?>,
     val categories: List<InventoryCategory>, val items: List<InventoryItem>, val json: String,
+    val runId: String = "",
 ) {
     fun markdown(): String = buildString {
         append("# 仓库资源\n\n采集时间：$capturedAt\n\n状态：${if (status == "complete") "完整" else "部分识别"}\n\n")
@@ -29,11 +30,44 @@ data class InventorySnapshot(
     private fun cell(value: String) = value.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
 }
 
+data class InventoryHistoryEntry(val fileName: String, val capturedAt: String, val status: String)
+
 /** 只读 Agent 快照；未知数量保持 null，绝不当作库存为零。 */
 class InventoryStore(private val dataRoot: File, private val piRoot: File) {
+    private val root: File get() = File(dataRoot, "inventory").canonicalFile
+    private val historyRoot: File get() = File(root, "history").canonicalFile.also {
+        require(it.parentFile == root) { "历史快照目录无效" }
+    }
+
     fun load(): InventorySnapshot? {
-        val root = File(dataRoot, "inventory").canonicalFile
         val file = safeFile(root, "latest.json") ?: return null
+        return loadSnapshot(file)
+    }
+
+    /** 仅枚举固定 history 根的直接文件，不接收路径、不递归跟随目录。 */
+    fun history(): List<InventoryHistoryEntry> {
+        val base = historyRoot
+        return base.listFiles().orEmpty().mapNotNull { file ->
+            val allowed = historyFile(file.name) ?: return@mapNotNull null
+            runCatching {
+                val snapshot = loadSnapshot(allowed)
+                InventoryHistoryEntry(file.name, snapshot.capturedAt, snapshot.status)
+            }.getOrNull() // 单份损坏的旧记录不妨碍选择其它快照。
+        }.sortedByDescending { it.fileName }
+    }
+
+    fun loadHistory(fileName: String): InventorySnapshot {
+        val file = historyFile(fileName) ?: error("历史快照不存在或路径无效，请重新选择")
+        return loadSnapshot(file)
+    }
+
+    private fun historyFile(fileName: String): File? {
+        if (!fileName.matches(Regex("[A-Za-z0-9_-]+\\.json"))) return null
+        val base = historyRoot
+        return safeFile(base, fileName)?.takeIf { it.parentFile == base }
+    }
+
+    private fun loadSnapshot(file: File): InventorySnapshot {
         val raw = readLimited(file)
         val document = runCatching { Json.parseToJsonElement(raw) as? JsonObject }.getOrNull()
             ?: error("仓库记录格式不正确，请重新识别后刷新")
@@ -53,16 +87,17 @@ class InventoryStore(private val dataRoot: File, private val piRoot: File) {
             (group["unknown"] as? JsonObject).orEmpty().forEach { (id, value) ->
                 val item = value as? JsonObject ?: error("未知物品格式不正确")
                 // Agent 可返回绝对路径，但只允许读取本次应用 inventory/captures 下的截图。
-                val captureRoot = File(root, "captures")
+                val captureRoot = File(root, "captures").canonicalFile.takeIf { it.parentFile == root }
                 items += InventoryItem("unknown:$category:$id", "未识别物品 · ${id.take(8)}", category,
-                    item.count("quantity"), image = safeFile(captureRoot, item.text("image")), unknown = true)
+                    item.count("quantity"), image = captureRoot?.let { safeFile(it, item.text("image")) }, unknown = true)
             }
             InventoryCategory(category, group.text("status"), group.text("reason"))
         }
         val currencies = (document["currencies"] as? JsonObject).orEmpty().mapValues { (_, value) ->
             (value as? JsonPrimitive)?.longOrNull?.takeIf { it >= 0 }
         }
-        return InventorySnapshot(document.text("captured_at"), document.text("status"), currencies, states, items, raw)
+        return InventorySnapshot(document.text("captured_at"), document.text("status"), currencies, states, items, raw,
+            document.text("run_id"))
     }
 
     private fun loadCatalog(): Map<String, File?> {
