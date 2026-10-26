@@ -31,6 +31,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.aliothmoon.maafw.ui.components.maaClickable
+import com.aliothmoon.maafw.ui.gacha.GachaScreen
+import com.aliothmoon.maafw.ui.inventory.InventoryScreen
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.domain.RunMode
 import com.aliothmoon.maafw.project.ProjectState
@@ -123,6 +132,8 @@ private fun TasksContent(
     modifier: Modifier = Modifier,
 ) {
     var showQuickOptions by rememberSaveable { mutableStateOf(false) }
+    var currentTab by rememberSaveable { mutableStateOf("tasks") } // "tasks" or "tools"
+    var selectedTool by rememberSaveable { mutableStateOf("inventory") } // "inventory" or "gacha"
 
     // 小窗里只让出画面，本页其余部分照常组合——拆掉的话展开时要整页重组，
     // 列表滚动与面板开合也跟着丢
@@ -155,6 +166,10 @@ private fun TasksContent(
         onDispose { arm(enabled = false, sourceRect = null) }
     }
 
+    if (currentTab == "tools") {
+        BackHandler { currentTab = "tasks" }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -177,7 +192,7 @@ private fun TasksContent(
                     LivePreview(
                         resolution = state.previewResolution,
                         surfaceReady = previewSurfaceReady,
-                        running = state.runner.phase.isBusy,
+                        running = state.runner.phase.isBusy || state.gachaCollecting || state.inventoryCollecting,
                         watchdogState = state.watchdogState,
                         content = previewContent.takeUnless { pipActive },
                         onEnterFullscreen = onEnterFullscreen,
@@ -187,23 +202,103 @@ private fun TasksContent(
                         // 小窗里这张卡缩成了巴掌大，别拿它的坐标覆盖 sourceRectHint
                         onBoundsChanged = { if (!pipActive) previewBounds = it },
                     )
-                    TaskWorkspace(
+
+                    // 模式切换行：当前执行任务 / 小工具
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "当前执行任务",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (currentTab == "tasks") FontWeight.Bold else FontWeight.Normal,
+                            color = if (currentTab == "tasks") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .maaClickable(indication = false) { currentTab = "tasks" }
+                                .padding(vertical = 4.dp),
+                        )
+                        Text(
+                            text = "小工具",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (currentTab == "tools") FontWeight.Bold else FontWeight.Normal,
+                            color = if (currentTab == "tools") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .maaClickable(indication = false) { currentTab = "tools" }
+                                .padding(vertical = 4.dp),
+                        )
+                    }
+
+                    if (currentTab == "tools") {
+                        // 小工具子选项按钮：仓库识别 / 抽卡记录
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ToolPill(
+                                text = "仓库识别",
+                                selected = selectedTool == "inventory",
+                                onClick = { selectedTool = "inventory" },
+                            )
+                            ToolPill(
+                                text = "抽卡记录",
+                                selected = selectedTool == "gacha",
+                                onClick = { selectedTool = "gacha" },
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(7f)
+                                .fillMaxWidth(),
+                        ) {
+                            if (selectedTool == "inventory") {
+                                InventoryScreen(
+                                    running = state.configurationLocked || state.gachaCollecting || state.inventoryCollecting || state.runner.phase.isBusy,
+                                    collecting = state.inventoryCollecting,
+                                    onStart = { onIntent(SessionIntent.StartInventoryCollection) },
+                                    onStop = { onIntent(SessionIntent.StopInventoryCollection) },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                GachaScreen(
+                                    running = state.configurationLocked || state.gachaCollecting || state.inventoryCollecting || state.runner.phase.isBusy,
+                                    collecting = state.gachaCollecting,
+                                    onStart = { categoryId, stopOnKnown ->
+                                        onIntent(SessionIntent.StartGachaCollection(categoryId, stopOnKnown))
+                                    },
+                                    onStop = { onIntent(SessionIntent.StopGachaCollection) },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                    } else {
+                        TaskWorkspace(
+                            state = state,
+                            runLog = runLog,
+                            onExportLogs = onExportLogs,
+                            onIntent = onIntent,
+                            showLogToggle = true,
+                            modifier = Modifier.weight(7f),
+                        )
+                    }
+                }
+
+                if (currentTab == "tasks") {
+                    Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+                    RunnerToggleButton(
                         state = state,
-                        runLog = runLog,
-                        onExportLogs = onExportLogs,
+                        quickOptionsOpen = showQuickOptions,
                         onIntent = onIntent,
-                        showLogToggle = true,
-                        modifier = Modifier.weight(7f),
+                        onToggleQuickOptions = { showQuickOptions = !showQuickOptions },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
-                RunnerToggleButton(
-                    state = state,
-                    quickOptionsOpen = showQuickOptions,
-                    onIntent = onIntent,
-                    onToggleQuickOptions = { showQuickOptions = !showQuickOptions },
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
         if (showQuickOptions) {
@@ -214,5 +309,46 @@ private fun TasksContent(
                 onDismiss = { showQuickOptions = false },
             )
         }
+    }
+}
+
+
+@Composable
+private fun ToolPill(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val borderColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = containerColor,
+        border = BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor),
+        modifier = modifier,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+        )
     }
 }

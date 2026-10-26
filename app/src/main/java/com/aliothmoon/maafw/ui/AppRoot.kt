@@ -35,10 +35,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Checklist
@@ -152,8 +148,6 @@ private enum class TopDestination(
 ) {
     Home(R.string.nav_home, Icons.Outlined.Home, Icons.Filled.Home),
     Tasks(R.string.nav_tasks, Icons.Outlined.Checklist, Icons.Filled.Checklist),
-    Tools(R.string.nav_inventory, Icons.Outlined.GridView, Icons.Filled.GridView, "小工具"),
-    Gacha(R.string.nav_tasks, Icons.Outlined.History, Icons.Filled.History, "抽卡记录"),
     Schedule(R.string.nav_schedule, Icons.Outlined.Schedule, Icons.Filled.Schedule),
     Settings(R.string.nav_settings, Icons.Outlined.Settings, Icons.Filled.Settings),
 }
@@ -515,28 +509,6 @@ fun AppRoot(
                         onEnterFullscreen = { previewFullscreen = true },
                         onExportLogs = { exportSheetVisible = true },
                         onIntent = viewModel::onIntent,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    TopDestination.Tools -> com.aliothmoon.maafw.ui.tools.ToolsScreen(
-                        isActivePage = pagerState.settledPage == page && !onSubPage,
-                        modifier = Modifier.fillMaxSize(),
-                        inventory = {
-                            com.aliothmoon.maafw.ui.inventory.InventoryScreen(
-                                running = state.configurationLocked || state.gachaCollecting || state.inventoryCollecting,
-                                collecting = state.inventoryCollecting,
-                                onStart = { viewModel.onIntent(SessionIntent.StartInventoryCollection) },
-                                onStop = { viewModel.onIntent(SessionIntent.StopInventoryCollection) },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        },
-                    )
-                    TopDestination.Gacha -> com.aliothmoon.maafw.ui.gacha.GachaScreen(
-                        running = state.configurationLocked || state.gachaCollecting || state.inventoryCollecting,
-                        collecting = state.gachaCollecting,
-                        onStart = { categoryId, stopOnKnown ->
-                            viewModel.onIntent(SessionIntent.StartGachaCollection(categoryId, stopOnKnown))
-                        },
-                        onStop = { viewModel.onIntent(SessionIntent.StopGachaCollection) },
                         modifier = Modifier.fillMaxSize(),
                     )
                     TopDestination.Schedule -> ScheduleScreen(

@@ -124,7 +124,7 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
         )
     }
     Column(modifier) {
-        TopAppBar(title = { Text("仓库资源") }, windowInsets = WindowInsets(0, 0, 0, 0), actions = {
+        TopAppBar(title = { Text("仓库识别") }, windowInsets = WindowInsets(0, 0, 0, 0), actions = {
             IconButton(enabled = !busy, onClick = { refresh() }) { Icon(Icons.Outlined.Refresh, "刷新") }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "导出") }
