@@ -73,6 +73,11 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     "MAFW_MIRRORCHYAN_RID",
                     "\"" + profile.mirrorchyanRid.orEmpty() + "\"",
                 )
+                buildConfigField(
+                    "String",
+                    "APP_UPDATE_GITHUB_REPOSITORY",
+                    "\"" + profile.appGithubRepository.orEmpty() + "\"",
+                )
 
                 // Placeholders rather than resValue: with no profile the value stays a resource
                 // reference and the checked-in label and icon keep working untouched

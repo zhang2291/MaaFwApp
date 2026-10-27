@@ -69,6 +69,8 @@ internal data class BuildProfile(
     val mirrorchyanRid: String?,
     /** Only timestamp-based resource publishers should enable this. */
     val stampResourceVersion: Boolean = false,
+    /** GitHub owner/repo used to update the app shell, distinct from the PI's resource repository. */
+    val appGithubRepository: String? = null,
 )
 
 /** Nothing configured at all: the package ships without a PI, see the soft failure on syncPiAssets */
@@ -131,6 +133,11 @@ private fun File.readProfile(): BuildProfile {
         appIcon = app?.text("icon")?.let { base.resolvePath(it) },
         mirrorchyanRid = update?.text("mirrorchyanRid")?.requireMirrorchyanRid(),
         stampResourceVersion = update?.text("stampResourceVersion")?.toBooleanStrict() ?: false,
+        appGithubRepository = update?.text("appGithubRepository")?.also {
+            require(Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$").matches(it)) {
+                "update.appGithubRepository must be owner/repo, got \"$it\""
+            }
+        },
     )
 }
 

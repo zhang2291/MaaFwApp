@@ -28,14 +28,29 @@ private fun Project.versionGitWorkingDir(): File {
 }
 
 private const val GIT_WORKING_DIR_KEY = "maafw.gitWorkingDir"
+private const val GIT_WORKING_TREE_DIRTY_KEY = "maafw.gitWorkingTreeDirty"
+
+private fun Project.gitWorkingTreeDirty(workingDir: File): Boolean {
+    val extras = rootProject.extensions.extraProperties
+    (extras.properties[GIT_WORKING_TREE_DIRTY_KEY] as? Boolean)?.let { return it }
+    val dirty = providers.exec {
+        workingDir(workingDir)
+        commandLine("git", "status", "--porcelain", "--untracked-files=no")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().isNotBlank()
+    extras.set(GIT_WORKING_TREE_DIRTY_KEY, dirty)
+    return dirty
+}
 
 /** versionCode counts commits in the selected version repo; the build fails without a git checkout */
 internal fun Project.gitVersionCode(): Int {
     val gitWorkingDir = versionGitWorkingDir()
-    return providers.exec {
+    val commits = providers.exec {
         workingDir(gitWorkingDir)
         commandLine("git", "rev-list", "--count", "HEAD")
     }.standardOutput.asText.get().trim().toInt()
+    // A local build with tracked source edits represents the next development revision.
+    return commits + if (gitWorkingTreeDirty(gitWorkingDir)) 1 else 0
 }
 
 /**
@@ -52,8 +67,13 @@ internal fun Project.gitVersionName(workingDir: File): String {
     val match = Regex("""^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?(?:-(\d+)-g[0-9a-f]+)?$""")
         .matchEntire(desc) ?: return desc.removePrefix("v").ifEmpty { "0.0.0-dev" }
     val (major, minor, patch, pre, distance) = match.destructured
+    if (gitWorkingTreeDirty(workingDir)) {
+        // Match the version this exact tree will get after its next commit, instead of reusing HEAD's version.
+        val nextDistance = distance.toIntOrNull()?.plus(1) ?: 1
+        return "$major.$minor." + (patch.toInt() + 1) + "-alpha." + nextDistance
+    }
     return when {
-        distance.isNotEmpty() -> "$major.$minor.${patch.toInt() + 1}-alpha.$distance"
+        distance.isNotEmpty() -> "$major.$minor." + (patch.toInt() + 1) + "-alpha." + distance
         pre.isNotEmpty() -> "$major.$minor.$patch-$pre"
         else -> "$major.$minor.$patch"
     }

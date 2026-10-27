@@ -65,6 +65,11 @@ class SettingsViewModel(
 ) : ViewModel() {
 
     private val abi = supportedAbis.firstNotNullOfOrNull(::androidAbi) ?: AndroidAbi.ANY
+
+    /** App APK releases and PI resource releases are separate repositories. */
+    private fun appUpdateRepository(metadata: ProjectMetadata?): String? =
+        BuildConfig.APP_UPDATE_GITHUB_REPOSITORY.trim().takeIf(String::isNotEmpty)
+            ?: metadata?.githubRepository
     private val updateOperation = MutableStateFlow(UpdatePanelState())
     private val resourceOperation = MutableStateFlow(
         ResourceUpdatePanelState(currentVersion = resourceUpdateService?.currentVersion()),
@@ -90,7 +95,7 @@ class SettingsViewModel(
                             channel = appSettings.updateChannel.value,
                             abi = abi,
                             mirrorchyanRid = mirrorchyanRid(metadata),
-                            githubRepository = metadata?.githubRepository,
+                            githubRepository = appUpdateRepository(metadata),
                         ),
                     )
                 }
@@ -200,7 +205,7 @@ class SettingsViewModel(
                 channel = appSettings.updateChannel.value,
                 abi = abi,
                 mirrorchyanRid = mirrorchyanRid(metadata),
-                githubRepository = metadata.githubRepository,
+                githubRepository = appUpdateRepository(metadata),
             ),
         )
         val available = result as? UpdateCheckResult.UpdateAvailable
@@ -234,7 +239,7 @@ class SettingsViewModel(
                 channel = appSettings.updateChannel.value,
                 abi = abi,
                 mirrorchyanRid = mirrorchyanRid(metadata),
-                githubRepository = metadata?.githubRepository,
+                githubRepository = appUpdateRepository(metadata),
             ),
         )
         // 错误与更新走同一种呈现（弹窗），二者天然互斥：失败不可能同时是 UpdateAvailable
@@ -393,7 +398,7 @@ class SettingsViewModel(
                     currentVersion = currentVersion,
                     mirrorchyanRid = mirrorchyanRid(metadata),
                     mirrorchyanCdk = cdk.takeIf(String::isNotBlank),
-                    githubRepository = metadata?.githubRepository,
+                    githubRepository = appUpdateRepository(metadata),
                 ),
             )) {
                 is UpdateResolveResult.Resolved -> resolved.update

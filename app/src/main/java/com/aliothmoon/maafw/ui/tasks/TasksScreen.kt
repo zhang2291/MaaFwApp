@@ -49,6 +49,7 @@ import com.aliothmoon.maafw.session.SessionIntent
 import com.aliothmoon.maafw.session.SessionUiState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaMotion
+import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
 import com.aliothmoon.maafw.ui.pip.LocalIsInPip
 import com.aliothmoon.maafw.ui.pip.PipController
@@ -207,8 +208,8 @@ private fun TasksContent(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                            .padding(vertical = MaaDesignTokens.Spacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xl),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -236,8 +237,8 @@ private fun TasksContent(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                .padding(vertical = MaaDesignTokens.Spacing.xs),
+                            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             ToolPill(
@@ -338,9 +339,12 @@ private fun ToolPill(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(MaaTheme.style.radii.button),
         color = containerColor,
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor),
+        border = BorderStroke(
+            if (selected) MaaDesignTokens.Border.selected else MaaDesignTokens.Separator.thickness,
+            borderColor,
+        ),
         modifier = modifier,
     ) {
         Text(
@@ -348,7 +352,10 @@ private fun ToolPill(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = contentColor,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            modifier = Modifier.padding(
+                horizontal = MaaDesignTokens.Spacing.md,
+                vertical = MaaDesignTokens.Spacing.sm,
+            ),
         )
     }
 }

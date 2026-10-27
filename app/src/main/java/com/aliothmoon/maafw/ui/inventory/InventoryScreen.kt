@@ -3,8 +3,10 @@ package com.aliothmoon.maafw.ui.inventory
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -29,6 +31,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.aliothmoon.maafw.constant.AppFiles
 import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.inventory.*
+import com.aliothmoon.maafw.theme.MaaDesignTokens
+import com.aliothmoon.maafw.theme.MaaTheme
+import com.aliothmoon.maafw.ui.components.MaaButton
+import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -124,8 +130,18 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
         )
     }
     Column(modifier) {
-        TopAppBar(title = { Text("仓库识别") }, windowInsets = WindowInsets(0, 0, 0, 0), actions = {
-            IconButton(enabled = !busy, onClick = { refresh() }) { Icon(Icons.Outlined.Refresh, "刷新") }
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "仓库识别",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(enabled = !busy, onClick = { refresh() }) {
+                Icon(Icons.Outlined.Refresh, "刷新")
+            }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "导出") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -135,52 +151,80 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
                         onClick = { menu = false; exportMd.launch("仓库资源.md") })
                 }
             }
-        })
+        }
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(100.dp),
+            columns = GridCells.Adaptive(108.dp),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = MaaDesignTokens.Spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
         ) {
             // Controls and summary span the screen; all inventory items share one adaptive grid.
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onStart, enabled = !running && !busy) { Text("开始识别") }
-                        if (collecting) OutlinedButton(onClick = onStop) { Text("停止识别") }
+                Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+                    ) {
+                        MaaButton(onClick = onStart, enabled = !running && !busy) { Text("开始识别") }
+                        if (collecting) MaaOutlinedButton(onClick = onStop) { Text("停止识别") }
                     }
-                    Text(if (collecting) "正在识别仓库，结束后自动刷新。" else "从游戏首页开始，只截图和滚动，不使用物品。", style = MaterialTheme.typography.bodySmall)
-                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-                    if (message.isNotBlank()) Text(message, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (collecting) "正在识别仓库，结束后自动刷新。"
+                        else "从游戏首页开始，只截图和滚动，不使用物品。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = MaaDesignTokens.Spacing.sm))
+                    if (message.isNotBlank()) {
+                        Text(message, Modifier.padding(top = MaaDesignTokens.Spacing.sm), style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
             if (data != null) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                         val capturedAt = runCatching {
                             java.time.OffsetDateTime.parse(data.capturedAt).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                         }.getOrDefault(data.capturedAt)
-                        Text("更新于 $capturedAt", style = MaterialTheme.typography.bodySmall)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("异方晶", "狄斯币", "搜索令", "都市搜索令").forEach { name ->
-                                val item = data.items.firstOrNull { it.name == name }
-                                val quantity = if (name in data.currencies) data.currencies[name]?.toString() ?: "未识别" else item?.quantityText ?: "未识别"
-                                // Display-only conversion; the snapshot and exports retain the raw amount.
-                                val displayQuantity = if (name == "异方晶") {
-                                    data.currencies[name]?.let { "$it / ${it / 180}" } ?: "未识别 / —"
-                                } else quantity
-                                ElevatedCard { Column(Modifier.padding(12.dp)) {
-                                    Text(if (name == "异方晶") "异方晶 / 抽数" else name, style = MaterialTheme.typography.labelMedium)
-                                    Text(displayQuantity, style = MaterialTheme.typography.titleMedium)
-                                } }
+                        Text(
+                            "更新于 $capturedAt",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val metrics = listOf("异方晶", "狄斯币", "搜索令", "都市搜索令").map { name ->
+                            val item = data.items.firstOrNull { it.name == name }
+                            val quantity = if (name in data.currencies) {
+                                data.currencies[name]?.toString() ?: "未识别"
+                            } else {
+                                item?.quantityText ?: "未识别"
+                            }
+                            // Display-only conversion; the snapshot and exports retain the raw amount.
+                            val displayQuantity = if (name == "异方晶") {
+                                data.currencies[name]?.let { it.toString() + " / " + (it / 180) } ?: "未识别 / —"
+                            } else quantity
+                            (if (name == "异方晶") "异方晶 / 抽数" else name) to displayQuantity
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
+                            metrics.chunked(2).forEach { row ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+                                ) {
+                                    row.forEach { (label, value) ->
+                                        InventoryMetricCard(label, value, Modifier.weight(1f))
+                                    }
+                                }
                             }
                         }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(enabled = !busy && !collecting, onClick = {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+                        ) {
+                            MaaOutlinedButton(enabled = !busy && !collecting, onClick = {
                                 action {
                                     history = withContext(Dispatchers.IO) { store.history() }
-                                        .filter { data.runId.isBlank() || it.fileName != "${data.runId}.json" }
+                                        .filter { data.runId.isBlank() || it.fileName != data.runId + ".json" }
                                 }
                             }) { Text(if (previous == null) "对比历史快照" else "更换历史快照") }
                             if (previous != null) TextButton(onClick = { baseline = null }) { Text("关闭对比") }
@@ -188,13 +232,22 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
                     }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("搜索物品") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("搜索物品") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(MaaTheme.style.radii.inner),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 if (previous != null) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        OutlinedCard(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(MaaTheme.style.radii.card),
+                        ) {
+                            Column(Modifier.padding(MaaDesignTokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                                 Text("与历史快照对比", style = MaterialTheme.typography.titleMedium)
                                 Text("历史：${formatCapturedAt(previous.capturedAt)}", style = MaterialTheme.typography.bodySmall)
                                 Text("当前：${formatCapturedAt(data.capturedAt)}", style = MaterialTheme.typography.bodySmall)
@@ -224,6 +277,36 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
 }
 
 @Composable
+private fun InventoryMetricCard(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.heightIn(min = 78.dp),
+        shape = RoundedCornerShape(MaaTheme.style.radii.card),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaaDesignTokens.Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs),
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
 private fun InventoryCell(item: InventoryItem) {
     val bitmap by produceState<ImageBitmap?>(null, item.image) {
         value = withContext(Dispatchers.IO) {
@@ -237,7 +320,10 @@ private fun InventoryCell(item: InventoryItem) {
             }.getOrNull()
         }
     }
-    OutlinedCard(Modifier.fillMaxWidth()) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MaaTheme.style.radii.card),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -270,8 +356,11 @@ private fun formatCapturedAt(value: String): String = runCatching {
 
 @Composable
 private fun InventoryChangeRow(row: InventoryComparisonRow) {
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MaaTheme.style.radii.card),
+    ) {
+        Column(Modifier.padding(MaaDesignTokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(row.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 Text(row.deltaText, style = MaterialTheme.typography.titleSmall,

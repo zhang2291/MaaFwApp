@@ -3,6 +3,7 @@ package com.aliothmoon.maafw.ui.gacha
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -25,6 +26,8 @@ import com.aliothmoon.maafw.gacha.GachaCategory
 import com.aliothmoon.maafw.gacha.GachaExchange
 import com.aliothmoon.maafw.gacha.GachaRecord
 import com.aliothmoon.maafw.ui.components.MaaButton
+import com.aliothmoon.maafw.theme.MaaDesignTokens
+import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -153,7 +156,7 @@ fun GachaScreen(
             message = if (permanent) "已永久删除该类型的当前记录" else "类型已删除，记录已备份：$backup"
         }
         AlertDialog(onDismissRequest = { if (!busy) deleteTarget = null }, title = { Text("删除“${target.name}”？") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            text = { Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                 Text("该类型包含 ${groupedRecords[target.id].orEmpty().size} 条抽卡记录。")
                 Text("删除并备份：记录保留在备份目录。\n永久删除：清除当前记录和自动报告，无法撤销。")
                 if (deleteError.isNotEmpty()) Text(deleteError, color = MaterialTheme.colorScheme.error)
@@ -167,7 +170,7 @@ fun GachaScreen(
     }
     pending?.let { bundle ->
         AlertDialog(onDismissRequest = { if (!busy) pending = null }, title = { Text("导入全部记录") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            text = { Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                 Text("文件包含 ${bundle.categories.size} 个类型、${bundle.records.size} 条记录。按类型合并，重复导入不会重复累计。请确认来自同一个游戏账号。")
                 if (importError.isNotEmpty()) Text(importError, color = MaterialTheme.colorScheme.error)
             } },
@@ -182,8 +185,18 @@ fun GachaScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("抽卡记录") }, windowInsets = WindowInsets(0, 0, 0, 0), actions = {
-            IconButton(onClick = { refresh() }, enabled = !busy) { Icon(Icons.Outlined.Refresh, "刷新记录") }
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "抽卡记录",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { refresh() }, enabled = !busy) {
+                Icon(Icons.Outlined.Refresh, "刷新记录")
+            }
             Box {
                 IconButton(onClick = { more = true }) { Icon(Icons.Outlined.MoreVert, "记录管理") }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
@@ -200,17 +213,17 @@ fun GachaScreen(
                         onClick = { more = false; importFile.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) })
                 }
             }
-        })
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 0.dp, vertical = MaaDesignTokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                     GachaMetric("总抽数", totals.pulls.toString(), Modifier.weight(1f))
                     GachaMetric("狂总数", totals.gold.toString(), Modifier.weight(1f))
                     GachaMetric("狂平均抽数", totals.average, Modifier.weight(1f))
                 }
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
                     GachaChoice(category?.name ?: "选择类型", snapshot.categories.map { it.id to it.name }, selectedId,
                         enabled = !busy && !running, modifier = Modifier.weight(1f)) {
                         selectedId = it; pool = ""; rarity = "全部"; query = ""
@@ -219,7 +232,7 @@ fun GachaScreen(
                         listOf("full" to "完整识别", "known" to "识别到已知停止"), if (stopOnKnown) "known" else "full",
                         enabled = !busy && !running, modifier = Modifier.weight(1f)) { stopOnKnown = it == "known" }
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                     TextButton(enabled = !busy && !running, onClick = {
                         newName = ""; addError = ""; showAdd = true
                     }) { Text("添加类型") }
@@ -227,7 +240,7 @@ fun GachaScreen(
                         deleteError = ""; deleteTarget = category
                     }) { Text("删除类型", color = MaterialTheme.colorScheme.error) }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
                     MaaButton(onClick = { if (!currentRunning && category != null) onStart(selectedId, stopOnKnown) },
                         enabled = !busy && !running && category != null && selectedId != "legacy") { Text("开始采集") }
                     if (collecting) MaaOutlinedButton(onClick = onStop) { Text("停止") }
@@ -243,7 +256,7 @@ fun GachaScreen(
             item {
                 GachaChoice(if (pool.isEmpty()) "全部实际卡池" else pool,
                     listOf("" to "全部实际卡池") + pools.map { it to it }, pool, modifier = Modifier.fillMaxWidth()) { pool = it }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                     FilterChip(selected = !details, onClick = { details = false }, label = { Text("概览") })
                     FilterChip(selected = details, onClick = { details = true }, label = { Text("完整明细") })
                 }
@@ -251,11 +264,14 @@ fun GachaScreen(
             if (!details) {
                 item {
                     Text("各类型汇总", style = MaterialTheme.typography.titleSmall)
-                    FlowRow(maxItemsInEachRow = 2, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(maxItemsInEachRow = 2, horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                         snapshot.categories.forEach { c ->
                             val count = GachaStatistics.totals(groupedRecords[c.id].orEmpty())
-                            OutlinedCard(Modifier.weight(1f).widthIn(min = 135.dp)) {
-                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            OutlinedCard(
+                                modifier = Modifier.weight(1f).widthIn(min = 135.dp),
+                                shape = RoundedCornerShape(MaaTheme.style.radii.card),
+                            ) {
+                                Column(Modifier.padding(MaaDesignTokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs)) {
                                     Text(c.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text("${count.pulls} 抽", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                     Text("狂：${count.gold}", style = MaterialTheme.typography.bodySmall)
@@ -268,8 +284,11 @@ fun GachaScreen(
                 item { Text("${category?.name ?: "当前类型"} · 狂级出货记录", style = MaterialTheme.typography.titleSmall) }
                 if (hits.isEmpty()) item { Text("暂无狂级记录", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(hits) { hit ->
-                    OutlinedCard(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(MaaTheme.style.radii.card),
+                    ) {
+                        Column(Modifier.padding(MaaDesignTokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(hit.record.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
                                 Text(hit.interval?.let { "$it 抽" } ?: "—", color = MaterialTheme.colorScheme.primary)
@@ -282,11 +301,21 @@ fun GachaScreen(
                 }
             } else {
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("搜索角色 / 卡池") },
-                            singleLine = true, modifier = Modifier.weight(1f))
-                        GachaChoice(rarity, (listOf("全部") + selectedRecords.mapNotNull { it.rarity }.distinct()).map { it to it },
-                            rarity, modifier = Modifier.widthIn(max = 110.dp)) { rarity = it }
+                    Row(horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            label = { Text("搜索角色 / 卡池") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(MaaTheme.style.radii.inner),
+                            modifier = Modifier.weight(1f),
+                        )
+                        GachaChoice(
+                            rarity,
+                            (listOf("全部") + selectedRecords.mapNotNull { it.rarity }.distinct()).map { it to it },
+                            rarity,
+                            modifier = Modifier.widthIn(max = 110.dp),
+                        ) { rarity = it }
                     }
                     Text("${filtered.size} 条记录", style = MaterialTheme.typography.labelMedium)
                 }
@@ -299,10 +328,13 @@ fun GachaScreen(
 
 @Composable
 private fun GachaMetric(label: String, value: String, modifier: Modifier) {
-    OutlinedCard(modifier) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    OutlinedCard(
+        modifier = modifier,
+        shape = RoundedCornerShape(MaaTheme.style.radii.card),
+    ) {
+        Column(Modifier.padding(MaaDesignTokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -313,7 +345,7 @@ private fun GachaChoice(label: String, options: List<Pair<String, String>>, sele
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
         MaaOutlinedButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
+            contentPadding = PaddingValues(horizontal = MaaDesignTokens.Spacing.md, vertical = MaaDesignTokens.Spacing.sm)) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Text(" ▾")
         }
@@ -326,7 +358,7 @@ private fun GachaChoice(label: String, options: List<Pair<String, String>>, sele
 
 @Composable
 private fun GachaDetailRow(record: GachaRecord) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = MaaDesignTokens.Spacing.xs), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xxsLg)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(record.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(record.rarity ?: "未判", style = MaterialTheme.typography.labelLarge)
