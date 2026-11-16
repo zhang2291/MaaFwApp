@@ -3,6 +3,7 @@ package com.aliothmoon.maafw.ui.tasks
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import android.graphics.Rect
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,9 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -31,10 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aliothmoon.maafw.ui.components.maaClickable
@@ -209,27 +210,34 @@ private fun TasksContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = MaaDesignTokens.Spacing.xs),
-                        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xl),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Bottom,
                     ) {
-                        Text(
-                            text = "当前执行任务",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (currentTab == "tasks") FontWeight.Bold else FontWeight.Normal,
-                            color = if (currentTab == "tasks") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .maaClickable(indication = false) { currentTab = "tasks" }
-                                .padding(vertical = 4.dp),
-                        )
-                        Text(
-                            text = "小工具",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (currentTab == "tools") FontWeight.Bold else FontWeight.Normal,
-                            color = if (currentTab == "tools") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .maaClickable(indication = false) { currentTab = "tools" }
-                                .padding(vertical = 4.dp),
-                        )
+                        listOf("tasks" to "当前执行任务", "tools" to "小工具").forEach { (key, label) ->
+                            val selected = currentTab == key
+                            Column(
+                                modifier = Modifier
+                                    .maaClickable(indication = false) { currentTab = key }
+                                    .padding(end = 20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .height(2.dp)
+                                        .width(if (selected) 20.dp else 0.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary,
+                                            RoundedCornerShape(1.dp),
+                                        ),
+                                )
+                            }
+                        }
                     }
 
                     if (currentTab == "tools") {
@@ -245,11 +253,13 @@ private fun TasksContent(
                                 text = "仓库识别",
                                 selected = selectedTool == "inventory",
                                 onClick = { selectedTool = "inventory" },
+                                modifier = Modifier.weight(1f),
                             )
                             ToolPill(
                                 text = "抽卡记录",
                                 selected = selectedTool == "gacha",
                                 onClick = { selectedTool = "gacha" },
+                                modifier = Modifier.weight(1f),
                             )
                         }
 
@@ -321,41 +331,11 @@ private fun ToolPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val contentColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val borderColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.outlineVariant
-    }
-
-    Surface(
+    FilterChip(
+        selected = selected,
         onClick = onClick,
-        shape = RoundedCornerShape(MaaTheme.style.radii.button),
-        color = containerColor,
-        border = BorderStroke(
-            if (selected) MaaDesignTokens.Border.selected else MaaDesignTokens.Separator.thickness,
-            borderColor,
-        ),
+        label = { Text(text, style = MaterialTheme.typography.labelLarge) },
         modifier = modifier,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = contentColor,
-            modifier = Modifier.padding(
-                horizontal = MaaDesignTokens.Spacing.md,
-                vertical = MaaDesignTokens.Spacing.sm,
-            ),
-        )
-    }
+        shape = RoundedCornerShape(MaaTheme.style.radii.button),
+    )
 }

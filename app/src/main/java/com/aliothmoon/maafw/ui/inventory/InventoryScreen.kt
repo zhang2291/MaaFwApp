@@ -3,7 +3,6 @@ package com.aliothmoon.maafw.ui.inventory
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +33,7 @@ import com.aliothmoon.maafw.inventory.*
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaButton
+import com.aliothmoon.maafw.ui.components.MaaCardSurface
 import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -129,9 +129,9 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
             confirmButton = { TextButton(onClick = { history = null }) { Text("取消") } },
         )
     }
-    Column(modifier) {
+    MaaCardSurface(modifier = modifier.fillMaxSize()) { Column(Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = MaaDesignTokens.Spacing.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -154,27 +154,29 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
         }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(108.dp),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = MaaDesignTokens.Spacing.md),
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(MaaDesignTokens.Spacing.lg),
             horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
             verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
         ) {
             // Controls and summary span the screen; all inventory items share one adaptive grid.
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-                    ) {
-                        MaaButton(onClick = onStart, enabled = !running && !busy) { Text("开始识别") }
-                        if (collecting) MaaOutlinedButton(onClick = onStop) { Text("停止识别") }
+                    MaaButton(
+                        onClick = onStart,
+                        enabled = !running && !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("开始识别") }
+                    if (collecting) {
+                        MaaOutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("停止识别") }
                     }
-                    Text(
-                        if (collecting) "正在识别仓库，结束后自动刷新。"
-                        else "从游戏首页开始，只截图和滚动，不使用物品。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (collecting) {
+                        Text(
+                            "正在识别仓库，结束后自动刷新。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = MaaDesignTokens.Spacing.sm))
                     if (message.isNotBlank()) {
                         Text(message, Modifier.padding(top = MaaDesignTokens.Spacing.sm), style = MaterialTheme.typography.bodyMedium)
@@ -210,6 +212,7 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
                                 Row(
                                     Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+                                    verticalAlignment = Alignment.Top,
                                 ) {
                                     row.forEach { (label, value) ->
                                         InventoryMetricCard(label, value, Modifier.weight(1f))
@@ -273,7 +276,7 @@ fun InventoryScreen(running: Boolean, collecting: Boolean, onStart: () -> Unit, 
                 }
             }
         }
-    }
+    } }
 }
 
 @Composable
@@ -281,8 +284,7 @@ private fun InventoryMetricCard(label: String, value: String, modifier: Modifier
     Surface(
         modifier = modifier.heightIn(min = 78.dp),
         shape = RoundedCornerShape(MaaTheme.style.radii.card),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(MaaDesignTokens.Spacing.md),
@@ -325,9 +327,9 @@ private fun InventoryCell(item: InventoryItem) {
         shape = RoundedCornerShape(MaaTheme.style.radii.card),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(MaaDesignTokens.Spacing.sm),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs),
         ) {
             bitmap?.let { Image(it, null, Modifier.size(48.dp)) }
                 ?: Icon(Icons.Outlined.Inventory2, null, Modifier.size(48.dp))
@@ -361,7 +363,7 @@ private fun InventoryChangeRow(row: InventoryComparisonRow) {
         shape = RoundedCornerShape(MaaTheme.style.radii.card),
     ) {
         Column(Modifier.padding(MaaDesignTokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm)) {
                 Text(row.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 Text(row.deltaText, style = MaterialTheme.typography.titleSmall,
                     color = if (row.delta == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
