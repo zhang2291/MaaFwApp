@@ -272,12 +272,24 @@ class MaaRunner(private val agentHost: AgentHost) {
             reason = "${e.javaClass.simpleName}: ${e.message}"
             Ln.e("MaaRunner: run failed: $reason")
         } finally {
+            runCatching { awaitTaskerStopped() }
+                .onFailure { Ln.w("MaaRunner: waiting for tasker to stop aborted: $it") }
             synchronized(lifecycleLock) {
                 running = false
                 stopRequested = false
             }
             notify { onFinished(outcome, reason) }
         }
+    }
+
+    private fun awaitTaskerStopped() {
+        val lib = MaaFrameworkLoader.library ?: return
+        val handle = synchronized(lifecycleLock) { tasker } ?: return
+        if (lib.MaaTaskerStopping(handle).toInt() == 0) return
+        val since = System.currentTimeMillis()
+        Ln.i("MaaRunner: tasker still stopping, waiting for the running task to exit")
+        while (lib.MaaTaskerStopping(handle).toInt() != 0) Thread.sleep(TASKER_STOP_POLL_MILLIS)
+        Ln.i("MaaRunner: tasker stopped after ${System.currentTimeMillis() - since}ms")
     }
 
     private fun isStopRequested(): Boolean = synchronized(lifecycleLock) {
@@ -571,6 +583,7 @@ class MaaRunner(private val agentHost: AgentHost) {
 
         /** 解释器这类 child 冷启动要几秒，超时给宽一点；连不上会整批任务失败，宁可多等 */
         const val AGENT_CONNECT_TIMEOUT_MILLIS = 30_000L
+        const val TASKER_STOP_POLL_MILLIS = 50L
 
         /**
          * 让系统分配回环端口；identifier 随即变成实际端口，原样传给 child

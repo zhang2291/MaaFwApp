@@ -2,6 +2,7 @@ package com.aliothmoon.maafw.bridge;
 
 
 import android.content.pm.PackageInfo;
+import android.os.SystemClock;
 
 import com.aliothmoon.maafw.remote.internal.ActivityUtils;
 import com.aliothmoon.maafw.remote.internal.PrimaryDisplayManager;
@@ -9,6 +10,7 @@ import com.aliothmoon.maafw.third.FakeContext;
 import com.aliothmoon.maafw.third.Ln;
 
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 
 import timber.log.Timber;
 
@@ -20,6 +22,12 @@ public final class DriverClass {
     private static final String TAG = "DriverClass";
     private static final int FRAME_WAIT_TIMEOUT_MS = 5000;
     private static final int FRAME_WAIT_INTERVAL_MS = 50;
+
+    /** 各 contact 按下的时刻（uptime ms），抬起时据此补足最短按住时长，见 {@link TapHoldPolicy} */
+    private static final ConcurrentHashMap<Integer, Long> downAt = new ConcurrentHashMap<>();
+
+    /** 按下后动过的 contact：滑动本就按得久，日志里与点击分开看 */
+    private static final ConcurrentHashMap<Integer, Boolean> moved = new ConcurrentHashMap<>();
 
     private DriverClass() {
     }
@@ -81,14 +89,33 @@ public final class DriverClass {
     /* 热路径：一次 Swipe / MultiSwipe 会连发几十次。坐标由框架记，这里不打日志 */
 
     public static boolean touchDown(int x, int y, int contact, int displayId) {
-        return InputControlUtils.down(x, y, contact, displayId);
+        boolean ok = InputControlUtils.down(x, y, contact, displayId);
+        if (ok) {
+            downAt.put(contact, SystemClock.uptimeMillis());
+            moved.remove(contact);
+        }
+        return ok;
     }
 
     public static boolean touchMove(int x, int y, int contact, int displayId) {
+        moved.put(contact, Boolean.TRUE);
         return InputControlUtils.move(x, y, contact, displayId);
     }
 
     public static boolean touchUp(int x, int y, int contact, int displayId) {
+        Long down = downAt.remove(contact);
+        boolean swipe = moved.remove(contact) != null;
+        if (down != null) {
+            long held = SystemClock.uptimeMillis() - down;
+            long minHold = TapHoldPolicy.FLOOR_MS;
+            long pad = Math.max(0L, minHold - held);
+            if (pad > 0) {
+                SystemClock.sleep(pad);
+            }
+            Ln.i(TAG + String.format(Locale.US,
+                    ": touchUp %s contact=%d at=(%d,%d) held=%dms minHold=%dms pad=%dms display=%d",
+                    swipe ? "swipe" : "tap", contact, x, y, held, minHold, pad, displayId));
+        }
         return InputControlUtils.up(x, y, contact, displayId);
     }
 
