@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.OndemandVideo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,19 +53,27 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.i18n.asString
 import com.aliothmoon.maafw.privileged.WatchdogState
 import com.aliothmoon.maafw.runner.DisplayResolution
 import com.aliothmoon.maafw.runner.PreviewTouchMarker
 import com.aliothmoon.maafw.session.PreviewTouchAction
+import com.aliothmoon.maafw.session.ServiceStatus
+import com.aliothmoon.maafw.session.StatusTone
 import com.aliothmoon.maafw.theme.MaaDesignTokens
+import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaCardSurface
 import com.aliothmoon.maafw.ui.components.MaaPreviewSurface
+import com.aliothmoon.maafw.ui.components.MaaPulsingDot
 import com.aliothmoon.maafw.ui.components.MaaTouchOverlay
 import com.aliothmoon.maafw.ui.components.maaClickable
 import com.aliothmoon.maafw.ui.pip.LocalIsInPip
@@ -124,6 +134,82 @@ internal fun rememberMovablePreview(
 }
 
 /**
+ * 空闲态紧凑状态胶囊：折叠占屏 30% 的灰色空预览，释放任务列表空间；随时可一键展开预览
+ */
+@Composable
+internal fun IdlePreviewCapsule(
+    serviceStatus: ServiceStatus,
+    enabledTaskCount: Int,
+    totalTaskCount: Int,
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = MaaTheme.palette
+    val dotColor = when (serviceStatus.tone) {
+        StatusTone.Primary -> palette.success.content
+        StatusTone.Warning -> palette.warning.content
+        StatusTone.Error -> MaterialTheme.colorScheme.error
+        StatusTone.Neutral -> palette.neutral.content
+    }
+    MaaCardSurface(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MaaDesignTokens.Spacing.md, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+            ) {
+                MaaPulsingDot(
+                    color = dotColor,
+                    pulse = serviceStatus.tone == StatusTone.Primary,
+                    size = 8.dp,
+                )
+                Text(
+                    text = serviceStatus.text.asString(),
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (totalTaskCount > 0) {
+                    Text(
+                        text = "· $enabledTaskCount/$totalTaskCount",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontFeatureSettings = "tnum",
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .maaClickable(onClick = onExpand)
+                    .padding(horizontal = 9.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.tasks_preview_expand),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Icon(
+                    imageVector = Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
  * 虚拟屏实时预览的内嵌宿主；画面本身不进 RunnerState/RunnerEvent（docs/android-ui-contract.md §10）
  * [content] 为 null 表示项目未就绪或画面已搬去全屏，两种情况都显示占位
  */
@@ -135,16 +221,11 @@ internal fun LivePreview(
     watchdogState: WatchdogState,
     content: (@Composable () -> Unit)?,
     onEnterFullscreen: () -> Unit,
-    // 高度受限的宿主区域，由调用方用 weight 给出；卡片在其内按预览分辨率等比缩到最大并居中，
-    // 横屏时不再整幅吃满宽度挤掉任务列表（对齐 MaaMeow VirtualDisplayPreview 的缩放）
     modifier: Modifier = Modifier,
+    onCollapse: (() -> Unit)? = null,
     /** 卡片在 window 中的位置，给画中画的进入动画用 */
     onBoundsChanged: ((Rect?) -> Unit)? = null,
 ) {
-    // 尺寸靠 aspectRatio 算而不是 BoxWithConstraints：后者是 SubcomposeLayout，
-    // 测量期的首次组合撞上 movableContent 搬家会拿到已停用的节点（Apply is called on
-    // deactivated node），翻页动画强制 remeasure 时必崩。matchHeightConstraintsFirst
-    // 先按高度定、放不下再回退按宽度，与原先那个分支等价
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         val aspect = resolution?.aspectRatio ?: (16f / 9f)
         val cardModifier = Modifier.aspectRatio(aspect, matchHeightConstraintsFirst = true)
@@ -154,13 +235,33 @@ internal fun LivePreview(
             })
         }
         if (content == null) {
-            MaaCardSurface(modifier = cardModifier.then(boundsReporting)) { LivePreviewIdleArt() }
+            MaaCardSurface(modifier = cardModifier.then(boundsReporting)) {
+                Box(Modifier.fillMaxSize()) {
+                    LivePreviewIdleArt(Modifier.align(Alignment.Center))
+                    if (onCollapse != null) {
+                        CollapsePreviewPill(
+                            onClick = onCollapse,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(MaaDesignTokens.Spacing.sm),
+                        )
+                    }
+                }
+            }
             return@Box
         }
         MaaCardSurface(modifier = cardModifier.then(boundsReporting).maaClickable(onClick = onEnterFullscreen)) {
             Box(Modifier.fillMaxSize()) {
                 content()
                 PreviewStatusMask(surfaceReady = surfaceReady, running = running)
+                if (onCollapse != null) {
+                    CollapsePreviewPill(
+                        onClick = onCollapse,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(MaaDesignTokens.Spacing.sm),
+                    )
+                }
                 WatchdogStatusBadge(
                     state = watchdogState,
                     modifier = Modifier
@@ -171,27 +272,59 @@ internal fun LivePreview(
         }
     }
 }
+
+@Composable
+private fun CollapsePreviewPill(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(MaaDesignTokens.CornerRadius.button))
+            .background(Color.Black.copy(alpha = 0.52f))
+            .maaClickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.tasks_preview_collapse),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+        )
+        Icon(
+            imageVector = Icons.Outlined.ExpandLess,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(14.dp),
+        )
+    }
+}
+
 @Composable
 private fun WatchdogStatusBadge(state: WatchdogState, modifier: Modifier = Modifier) {
-    // 着色对齐 MaaMeow 预览小窗右上角徽标；两种坏结局同为红，但文字要分得开——
-    // 「已停止」去看应用是不是被杀了，「已离屏」去改运行模式，指向不同
+    val palette = MaaTheme.palette
     val (dotColor, label) = when (state) {
         WatchdogState.WATCHING ->
-            Color(0xFF4CAF50) to stringResource(R.string.virtual_display_game_running)
+            palette.success.content to stringResource(R.string.virtual_display_game_running)
         WatchdogState.APP_DIED ->
-            Color(0xFFF44336) to stringResource(R.string.virtual_display_game_stopped)
+            MaterialTheme.colorScheme.error to stringResource(R.string.virtual_display_game_stopped)
         WatchdogState.DISPLAY_DRIFT ->
-            Color(0xFFF44336) to stringResource(R.string.virtual_display_app_drifted)
+            MaterialTheme.colorScheme.error to stringResource(R.string.virtual_display_app_drifted)
         WatchdogState.IDLE ->
-            Color(0xFF9E9E9E) to stringResource(R.string.virtual_display_idle)
+            palette.neutral.content to stringResource(R.string.virtual_display_idle)
     }
     Row(
         modifier = modifier
-            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(MaaDesignTokens.CornerRadius.button))
+            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(MaaDesignTokens.CornerRadius.button))
             .padding(horizontal = MaaDesignTokens.Spacing.sm, vertical = MaaDesignTokens.Spacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(MaaDesignTokens.IconSize.dotMd).clip(CircleShape).background(dotColor))
+        MaaPulsingDot(
+            color = dotColor,
+            pulse = state == WatchdogState.WATCHING,
+            size = MaaDesignTokens.IconSize.dotMd,
+        )
         Spacer(Modifier.width(MaaDesignTokens.Spacing.xs))
         Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White)
     }
@@ -362,8 +495,8 @@ private fun PreviewStatusMask(surfaceReady: Boolean, running: Boolean) {
 }
 
 @Composable
-private fun LivePreviewIdleArt() {
-    Box(contentAlignment = Alignment.Center) {
+private fun LivePreviewIdleArt(modifier: Modifier = Modifier) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs),

@@ -171,7 +171,7 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     }
 
     override suspend fun setRunMode(mode: RunMode): Unit = with(AppSettingsSchema) {
-        context.dataStore.edit { it[runMode] = mode.name }
+        context.dataStore.edit { it[runMode] = RunMode.BACKGROUND.name }
     }
 
     override suspend fun setOverlayControlMode(mode: OverlayControlMode): Unit = with(AppSettingsSchema) {
@@ -248,8 +248,7 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
     private fun parseBackend(raw: String): RemoteBackend =
         runCatching { RemoteBackend.valueOf(raw) }.getOrDefault(RemoteBackend.SHIZUKU)
 
-    private fun parseRunMode(raw: String): RunMode =
-        runCatching { RunMode.valueOf(raw) }.getOrDefault(RunMode.BACKGROUND)
+    private fun parseRunMode(raw: String): RunMode = RunMode.BACKGROUND
 
     private fun parseOverlayMode(raw: String): OverlayControlMode =
         runCatching { OverlayControlMode.valueOf(raw) }.getOrDefault(OverlayControlMode.FLOAT_BALL)
@@ -267,5 +266,5 @@ class AppSettingsManager(private val context: Context) : AppSettingsGateway {
         runCatching { UpdateChannel.valueOf(raw) }.getOrDefault(UpdateChannel.STABLE)
 
     private fun parseUpdateSource(raw: String): UpdateSource =
-        runCatching { UpdateSource.valueOf(raw) }.getOrDefault(UpdateSource.MIRRORCHYAN)
+        runCatching { UpdateSource.valueOf(raw) }.getOrDefault(UpdateSource.GITHUB)
 }

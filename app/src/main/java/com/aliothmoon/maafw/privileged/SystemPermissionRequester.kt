@@ -40,9 +40,15 @@ object SystemPermissionRequester {
     suspend fun request(activity: Activity, permission: SystemPermission): Boolean {
         if (isGranted(activity, permission)) return true
         return suspendCancellableCoroutine { cont ->
-            XXPermissions.with(activity)
-                .permission(permission.toPlatform())
-                .request { granted, _ -> cont.resume(granted.isNotEmpty()) }
+            runCatching {
+                XXPermissions.with(activity)
+                    .unchecked()
+                    .permission(permission.toPlatform())
+                    .request { granted, _ -> cont.resume(granted.isNotEmpty()) }
+            }.onFailure {
+                Timber.e(it, "Failed to request permission: $permission")
+                cont.resume(false)
+            }
         }
     }
 

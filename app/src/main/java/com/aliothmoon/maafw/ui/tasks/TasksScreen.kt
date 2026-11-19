@@ -1,12 +1,14 @@
 package com.aliothmoon.maafw.ui.tasks
 
+import android.graphics.Rect
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
-import android.graphics.Rect
-import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,15 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -33,14 +34,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.aliothmoon.maafw.ui.components.maaClickable
-import com.aliothmoon.maafw.ui.gacha.GachaScreen
-import com.aliothmoon.maafw.ui.inventory.InventoryScreen
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.domain.RunMode
 import com.aliothmoon.maafw.project.ProjectState
@@ -50,8 +49,12 @@ import com.aliothmoon.maafw.session.SessionIntent
 import com.aliothmoon.maafw.session.SessionUiState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaMotion
-import com.aliothmoon.maafw.theme.MaaTheme
+import com.aliothmoon.maafw.ui.components.MaaInsetSegmentedControl
 import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
+import com.aliothmoon.maafw.ui.components.maaCardBorder
+import com.aliothmoon.maafw.ui.components.maaClickable
+import com.aliothmoon.maafw.ui.gacha.GachaScreen
+import com.aliothmoon.maafw.ui.inventory.InventoryScreen
 import com.aliothmoon.maafw.ui.pip.LocalIsInPip
 import com.aliothmoon.maafw.ui.pip.PipController
 import com.aliothmoon.maafw.ui.pip.PipHost
@@ -136,25 +139,31 @@ private fun TasksContent(
     var showQuickOptions by rememberSaveable { mutableStateOf(false) }
     var currentTab by rememberSaveable { mutableStateOf("tasks") } // "tasks" or "tools"
     var selectedTool by rememberSaveable { mutableStateOf("inventory") } // "inventory" or "gacha"
+    var previewManuallyExpanded by rememberSaveable { mutableStateOf(false) }
+    var showRunLog by rememberSaveable { mutableStateOf(false) }
+    var reorderMode by rememberSaveable { mutableStateOf(false) }
 
-    // 小窗里只让出画面，本页其余部分照常组合——拆掉的话展开时要整页重组，
-    // 列表滚动与面板开合也跟着丢
+    val activeTasks = state.activeConfiguration?.tasks.orEmpty()
+    val enabledTaskCount = activeTasks.count { it.enabled }
+    val canReorder = !state.configurationLocked && !showRunLog && activeTasks.size > 1
+    val effectiveReorderMode = reorderMode && canReorder
+    val isPreviewRunning = state.runner.phase.isBusy || state.gachaCollecting || state.inventoryCollecting
+    val showFullPreview = currentTab == "tasks" && (isPreviewRunning || previewManuallyExpanded)
+
     val pipActive = LocalIsInPip.current
-
-    // 全屏态不用显式排除：预览搬去全屏宿主后 previewContent == null，天然不在武装范围
     val context = LocalContext.current
     val pipHost = context as? PipHost
     val previewResolution = state.previewResolution
     var previewBounds by remember { mutableStateOf<Rect?>(null) }
     val pipEligible = pipOnHome &&
-            isActivePage &&
-            previewContent != null &&
-            previewResolution != null &&
-            state.runMode == RunMode.BACKGROUND &&
-            state.runner.phase.isBusy &&
-            previewSurfaceReady &&
-            pipHost != null &&
-            PipController.isSupported(context)
+        isActivePage &&
+        previewContent != null &&
+        previewResolution != null &&
+        state.runMode == RunMode.BACKGROUND &&
+        state.runner.phase.isBusy &&
+        previewSurfaceReady &&
+        pipHost != null &&
+        PipController.isSupported(context)
     DisposableEffect(pipHost, pipEligible, previewResolution, previewBounds) {
         fun arm(enabled: Boolean, sourceRect: Rect?) {
             val host = pipHost ?: return
@@ -176,7 +185,6 @@ private fun TasksContent(
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
-            // AppRoot 已消费系统栏 inset，内层 Scaffold 不再重复
             contentWindowInsets = WindowInsets(),
         ) { padding ->
             Column(
@@ -188,84 +196,99 @@ private fun TasksContent(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(top = MaaDesignTokens.Spacing.md),
-                    verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
+                        .padding(top = MaaDesignTokens.Spacing.md)
+                        .animateContentSize(),
+                    verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
                 ) {
-                    LivePreview(
-                        resolution = state.previewResolution,
-                        surfaceReady = previewSurfaceReady,
-                        running = state.runner.phase.isBusy || state.gachaCollecting || state.inventoryCollecting,
-                        watchdogState = state.watchdogState,
-                        content = previewContent.takeUnless { pipActive },
-                        onEnterFullscreen = onEnterFullscreen,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(3f),
-                        // 小窗里这张卡缩成了巴掌大，别拿它的坐标覆盖 sourceRectHint
-                        onBoundsChanged = { if (!pipActive) previewBounds = it },
-                    )
-
-                    // 模式切换行：当前执行任务 / 小工具
+                    // 顶栏：左侧内凹分段切换（任务 | 小工具），右侧「排序」「日志」快捷胶囊
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = MaaDesignTokens.Spacing.xs),
-                        verticalAlignment = Alignment.Bottom,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        listOf("tasks" to "当前执行任务", "tools" to "小工具").forEach { (key, label) ->
-                            val selected = currentTab == key
-                            Column(
-                                modifier = Modifier
-                                    .maaClickable(indication = false) { currentTab = key }
-                                    .padding(end = 20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
+                        MaaInsetSegmentedControl(
+                            options = listOf(
+                                "tasks" to stringResource(R.string.tasks_tab_tasks),
+                                "tools" to stringResource(R.string.tasks_tab_tools),
+                            ),
+                            selected = currentTab,
+                            onSelect = { tab ->
+                                currentTab = tab
+                                if (tab != "tasks") reorderMode = false
+                            },
+                        )
+
+                        if (currentTab == "tasks") {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(vertical = 4.dp),
+                                TopActionPill(
+                                    label = stringResource(
+                                        if (effectiveReorderMode) R.string.common_done else R.string.tasks_reorder,
+                                    ),
+                                    active = effectiveReorderMode,
+                                    enabled = canReorder,
+                                    onClick = { reorderMode = !effectiveReorderMode },
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .height(2.dp)
-                                        .width(if (selected) 20.dp else 0.dp)
-                                        .background(
-                                            MaterialTheme.colorScheme.primary,
-                                            RoundedCornerShape(1.dp),
-                                        ),
+                                TopActionPill(
+                                    label = stringResource(
+                                        if (showRunLog) R.string.common_close else R.string.tasks_log,
+                                    ),
+                                    active = showRunLog,
+                                    enabled = true,
+                                    onClick = {
+                                        showRunLog = !showRunLog
+                                        if (showRunLog) reorderMode = false
+                                    },
                                 )
                             }
                         }
                     }
 
-                    if (currentTab == "tools") {
-                        // 小工具子选项按钮：仓库识别 / 抽卡记录
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = MaaDesignTokens.Spacing.xs),
-                            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ToolPill(
-                                text = "仓库识别",
-                                selected = selectedTool == "inventory",
-                                onClick = { selectedTool = "inventory" },
-                                modifier = Modifier.weight(1f),
+                    // 实时预览区：切「小工具」完全隐藏；任务页空闲默认折叠为紧凑状态胶囊，运行或手动点开才展开
+                    if (currentTab == "tasks") {
+                        if (showFullPreview) {
+                            LivePreview(
+                                resolution = state.previewResolution,
+                                surfaceReady = previewSurfaceReady,
+                                running = isPreviewRunning,
+                                watchdogState = state.watchdogState,
+                                content = previewContent.takeUnless { pipActive },
+                                onEnterFullscreen = onEnterFullscreen,
+                                onCollapse = if (!isPreviewRunning) {
+                                    { previewManuallyExpanded = false }
+                                } else {
+                                    null
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(176.dp),
+                                onBoundsChanged = { if (!pipActive) previewBounds = it },
                             )
-                            ToolPill(
-                                text = "抽卡记录",
-                                selected = selectedTool == "gacha",
-                                onClick = { selectedTool = "gacha" },
-                                modifier = Modifier.weight(1f),
+                        } else {
+                            IdlePreviewCapsule(
+                                serviceStatus = state.serviceStatus,
+                                enabledTaskCount = enabledTaskCount,
+                                totalTaskCount = activeTasks.size,
+                                onExpand = { previewManuallyExpanded = true },
                             )
                         }
+                    }
+
+                    if (currentTab == "tools") {
+                        MaaInsetSegmentedControl(
+                            options = listOf(
+                                "inventory" to stringResource(R.string.tasks_tool_inventory),
+                                "gacha" to stringResource(R.string.tasks_tool_gacha),
+                            ),
+                            selected = selectedTool,
+                            onSelect = { selectedTool = it },
+                        )
 
                         Box(
                             modifier = Modifier
-                                .weight(7f)
+                                .weight(1f)
                                 .fillMaxWidth(),
                         ) {
                             if (selectedTool == "inventory") {
@@ -292,10 +315,13 @@ private fun TasksContent(
                         TaskWorkspace(
                             state = state,
                             runLog = runLog,
+                            logOpen = showRunLog,
+                            reorderMode = effectiveReorderMode,
+                            onCloseLog = { showRunLog = false },
+                            onExitReorder = { reorderMode = false },
                             onExportLogs = onExportLogs,
                             onIntent = onIntent,
-                            showLogToggle = true,
-                            modifier = Modifier.weight(7f),
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
@@ -323,19 +349,39 @@ private fun TasksContent(
     }
 }
 
-
 @Composable
-private fun ToolPill(
-    text: String,
-    selected: Boolean,
+private fun TopActionPill(
+    label: String,
+    active: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(text, style = MaterialTheme.typography.labelLarge) },
-        modifier = modifier,
-        shape = RoundedCornerShape(MaaTheme.style.radii.button),
-    )
+    val shape = RoundedCornerShape(10.dp)
+    Surface(
+        shape = shape,
+        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        border = if (active) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            maaCardBorder()
+        },
+        modifier = Modifier
+            .clip(shape)
+            .alpha(if (enabled) 1f else MaaDesignTokens.Alpha.disabled)
+            .maaClickable(enabled = enabled, onClick = onClick),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+            ),
+            color = if (active) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+        )
+    }
 }

@@ -65,6 +65,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 internal fun TaskList(
     active: ResolvedRunConfiguration,
     locked: Boolean,
+    reorderMode: Boolean,
     onIntent: (SessionIntent) -> Unit,
     onRequestAddTasks: () -> Unit,
     onEditTask: (String) -> Unit,
@@ -119,27 +120,52 @@ internal fun TaskList(
         verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
         contentPadding = PaddingValues(bottom = MaaDesignTokens.Spacing.sm),
     ) {
+        val ordered = currentOrder()
         items(
-            items = currentOrder(),
+            items = ordered,
             key = { it },
             contentType = { "task" },
         ) { instanceId ->
             val task = tasksById[instanceId] ?: return@items
+            val idx = ordered.indexOf(instanceId)
             ReorderableItem(reorderableState, key = instanceId) { isDragging ->
                 TaskRow(
                     task = task,
+                    orderIndex = idx,
                     locked = locked,
                     isDragging = isDragging,
-                    dragHandleModifier = Modifier.draggableHandle(
-                        enabled = !locked,
-                        onDragStopped = {
-                            val target = currentOrder().indexOf(instanceId)
-                            val origin = canonicalState.value.indexOf(instanceId)
-                            if (target >= 0 && origin >= 0 && target != origin) {
-                                onIntent(SessionIntent.MoveTask(active.id, instanceId, target))
-                            }
-                        },
-                    ),
+                    reorderMode = reorderMode,
+                    canMoveUp = idx > 0,
+                    canMoveDown = idx in 0 until (ordered.size - 1),
+                    onMoveUp = {
+                        val cur = currentOrder().indexOf(instanceId)
+                        if (cur > 0) {
+                            pendingOrder = null
+                            onIntent(SessionIntent.MoveTask(active.id, instanceId, cur - 1))
+                        }
+                    },
+                    onMoveDown = {
+                        val list = currentOrder()
+                        val cur = list.indexOf(instanceId)
+                        if (cur in 0 until (list.size - 1)) {
+                            pendingOrder = null
+                            onIntent(SessionIntent.MoveTask(active.id, instanceId, cur + 1))
+                        }
+                    },
+                    dragHandleModifier = if (reorderMode) {
+                        Modifier.draggableHandle(
+                            enabled = !locked,
+                            onDragStopped = {
+                                val target = currentOrder().indexOf(instanceId)
+                                val origin = canonicalState.value.indexOf(instanceId)
+                                if (target >= 0 && origin >= 0 && target != origin) {
+                                    onIntent(SessionIntent.MoveTask(active.id, instanceId, target))
+                                }
+                            },
+                        )
+                    } else {
+                        Modifier
+                    },
                     onToggle = { enabled ->
                         onIntent(SessionIntent.ToggleTask(active.id, task.instanceId, enabled))
                     },
@@ -152,7 +178,7 @@ internal fun TaskList(
                     },
                     onRename = { renamingTask = task },
                     onClick = {
-                        if (task.hasOptions) onEditTask(task.instanceId)
+                        if (!reorderMode && task.hasOptions) onEditTask(task.instanceId)
                     },
                     modifier = Modifier.animateItem(),
                 )
@@ -190,22 +216,16 @@ internal fun TaskList(
 }
 
 /**
- * 配置选择 +「添加任务」
- * 间距收紧；添加钮与配置卡同圆角 / 同描边厚度，高度拉齐成一组
+ * 配置选择 +「添加任务」：排序与日志按钮已上移至顶栏，本行不再拥挤截断配置名
  */
 @Composable
 internal fun ConfigurationSelectorRow(
     active: ResolvedRunConfiguration?,
     locked: Boolean,
-    logOpen: Boolean,
     onSelectConfig: () -> Unit,
     onAddTasks: () -> Unit,
-    onToggleLog: () -> Unit,
     modifier: Modifier = Modifier,
-    showLogToggle: Boolean = true,
 ) {
-    // 固定高度而非 IntrinsicSize.Min：三件东西各有各的固有高度（卡按文字、按钮按 Material
-    // 最小尺寸），交给固有高度对齐必然是最高的那个说了算，压不下来
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -213,7 +233,6 @@ internal fun ConfigurationSelectorRow(
         horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 按钮的 48dp 最小触控区会把整行顶起来；这一行本来就贴着预览卡，让位给任务列表
         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
             ConfigurationSelectorCard(
                 active = active,
@@ -229,27 +248,17 @@ internal fun ConfigurationSelectorRow(
                 icon = MaaIcons.Add,
                 label = stringResource(R.string.tasks_add_task),
             )
-            // 不给图标：两个字比任何图标都说得清，且「日志 / 关闭」等宽，切换时按钮不跳
-            if (showLogToggle) {
-                RowActionButton(
-                    onClick = onToggleLog,
-                    enabled = true,
-                    icon = null,
-                    label = stringResource(if (logOpen) R.string.common_close else R.string.tasks_log),
-                    active = logOpen,
-                )
-            }
         }
     }
 }
 
-/** 配置行三件套的统一高度：容得下一行 titleMedium，再低就压字了 */
+/** 配置行统一高度：容得下一行 titleMedium，再低就压字了 */
 private val ConfigRowHeight = 44.dp
 
 /**
  * 配置行右侧的动作钮：primary 字色 + 中性描边（有框，不要 primary 色框）
  *
- * [active] 为 true 时描边也转 primary，用来表达「日志正开着」这种开关态
+ * [active] 为 true 时描边也转 primary，用来表达「日志正开着 / 排序中」这种开关态
  * [icon] 为 null 即纯文字；有文字时不另给 contentDescription，读屏念的就是按钮上的字
  */
 @Composable
@@ -267,7 +276,7 @@ private fun RowActionButton(
         enabled = enabled,
         // 贴在任务行右侧，圆角跟卡片对齐而不是按钮的默认档，否则会比它依附的那张卡更圆
         shape = RoundedCornerShape(MaaTheme.style.radii.card),
-        contentPadding = PaddingValues(horizontal = MaaDesignTokens.Spacing.md),
+        contentPadding = PaddingValues(horizontal = 10.dp),
         colors = ButtonDefaults.outlinedButtonColors(
             contentColor = scheme.primary,
             disabledContentColor = scheme.onSurface.copy(alpha = MaaDesignTokens.Alpha.disabledContent),

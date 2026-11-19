@@ -5,11 +5,12 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.annotation.StringRes
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -26,11 +27,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checklist
@@ -69,6 +72,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -102,6 +108,7 @@ import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.SettingsViewModel
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaFwTheme
+import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaDiagnosticList
 import com.aliothmoon.maafw.ui.components.MaaMarkdownSheet
 import com.aliothmoon.maafw.ui.components.MaaPromptDialog
@@ -109,6 +116,8 @@ import com.aliothmoon.maafw.ui.components.PiInstallDialog
 import com.aliothmoon.maafw.ui.components.ShizukuReadinessDialog
 import com.aliothmoon.maafw.ui.components.UpdatePromptDialog
 import com.aliothmoon.maafw.ui.components.clearFocusOnBlankTap
+import com.aliothmoon.maafw.ui.components.maaCardBorder
+import com.aliothmoon.maafw.ui.components.maaClickable
 import com.aliothmoon.maafw.ui.home.HomeScreen
 import com.aliothmoon.maafw.ui.logs.AppLogDetailScreen
 import com.aliothmoon.maafw.ui.logs.AppLogScreen
@@ -420,36 +429,69 @@ fun AppRoot(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
-                Column {
-                    HorizontalDivider(
-                        thickness = MaaDesignTokens.Separator.thickness,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-                    Surface(color = MaterialTheme.colorScheme.surface) {
+                // 悬浮胶囊底栏（Floating Pill Dock）
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(
+                            horizontal = MaaDesignTokens.Spacing.lg,
+                            vertical = 8.dp,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val dockShape = RoundedCornerShape(24.dp)
+                    Surface(
+                        shape = dockShape,
+                        color = MaterialTheme.colorScheme.surface.copy(
+                            alpha = if (MaaTheme.isDark) 0.96f else 0.98f,
+                        ),
+                        border = maaCardBorder(),
+                        shadowElevation = if (MaaTheme.isDark) 6.dp else 10.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .navigationBarsPadding()
                                 .height(BottomBarHeight)
+                                .padding(horizontal = 6.dp, vertical = 5.dp)
                                 .selectableGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             TopDestination.entries.forEachIndexed { index, destination ->
                                 val selected = pagerState.currentPage == index
                                 val label = destination.labelOverride ?: stringResource(destination.labelRes)
-                                val tint = if (selected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
+                                val pillColor by animateColorAsState(
+                                    targetValue = if (selected) {
+                                        MaterialTheme.colorScheme.primary.copy(
+                                            alpha = if (MaaTheme.isDark) 0.14f else 0.09f,
+                                        )
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    label = "dockPill",
+                                )
+                                val tint by animateColorAsState(
+                                    targetValue = if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    label = "dockTint",
+                                )
+                                val itemShape = RoundedCornerShape(18.dp)
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .selectable(
-                                            selected = selected,
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = LocalIndication.current,
-                                            role = Role.Tab,
+                                        .background(pillColor, itemShape)
+                                        .semantics {
+                                            this.selected = selected
+                                            this.role = Role.Tab
+                                        }
+                                        .maaClickable(
+                                            indication = false,
                                             onClick = {
                                                 scope.launch { pagerState.animateScrollToPage(index) }
                                             },
@@ -461,6 +503,7 @@ fun AppRoot(
                                         imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
                                         contentDescription = label,
                                         tint = tint,
+                                        modifier = Modifier.size(20.dp),
                                     )
                                     Spacer(Modifier.height(MaaDesignTokens.Spacing.xxs))
                                     Text(
@@ -495,6 +538,9 @@ fun AppRoot(
                         update = settingsState.update,
                         resourceUpdate = settingsState.resourceUpdate,
                         onSettingsIntent = settingsViewModel::onIntent,
+                        onNavigateToTasks = {
+                            scope.launch { pagerState.animateScrollToPage(TopDestination.Tasks.ordinal) }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                     TopDestination.Tasks -> TasksScreen(

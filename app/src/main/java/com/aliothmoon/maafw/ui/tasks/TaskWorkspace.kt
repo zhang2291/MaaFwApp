@@ -2,23 +2,35 @@ package com.aliothmoon.maafw.ui.tasks
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.domain.ResolvedRunConfiguration
 import com.aliothmoon.maafw.project.ProjectState
@@ -28,19 +40,21 @@ import com.aliothmoon.maafw.session.SessionUiState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaMotion
 import com.aliothmoon.maafw.ui.components.MaaEmptyState
+import com.aliothmoon.maafw.ui.components.maaClickable
 
 /**
- * 任务编辑内层：配置行、任务列表、sheet。外壳（预览 / 启停 / 悬浮窗 chrome）各自另排
- *
- * [showLogToggle] 为 true 时日志就地替换列表（任务页）；悬浮窗用 tab 承载日志，关掉这一颗
+ * 任务编辑内层：配置行、排序提示条、任务列表/日志切换、sheet
  */
 @Composable
 internal fun TaskWorkspace(
     state: SessionUiState,
     runLog: () -> List<RunLogEntry>,
+    logOpen: Boolean,
+    reorderMode: Boolean,
+    onCloseLog: () -> Unit,
+    onExitReorder: () -> Unit,
     onExportLogs: () -> Unit,
     onIntent: (SessionIntent) -> Unit,
-    showLogToggle: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val locked = state.configurationLocked
@@ -49,69 +63,82 @@ internal fun TaskWorkspace(
     var showAddTasks by rememberSaveable { mutableStateOf(false) }
     var editingTaskInstanceId by rememberSaveable { mutableStateOf<String?>(null) }
     var showConfigSheet by rememberSaveable { mutableStateOf(false) }
-    var showRunLog by rememberSaveable { mutableStateOf(false) }
-    val logOpen = showLogToggle && showRunLog
+    val effectiveReorderMode = reorderMode && !locked && !logOpen && (active?.tasks?.size ?: 0) > 1
 
     Column(
         modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
     ) {
         ConfigurationSelectorRow(
             active = active,
             locked = locked,
-            logOpen = logOpen,
             onSelectConfig = { showConfigSheet = true },
             onAddTasks = { showAddTasks = true },
-            onToggleLog = { showRunLog = !showRunLog },
-            showLogToggle = showLogToggle,
         )
 
-        if (showLogToggle) {
-            AnimatedContent(
-                targetState = logOpen,
-                transitionSpec = {
-                    val opening = targetState
-                    val enter = fadeIn(
-                        tween(FadeInMillis, FadeInDelayMillis, MaaMotion.EmphasizedDecelerate),
-                    ) + slideInVertically(
-                        tween(FadeInMillis, FadeInDelayMillis, MaaMotion.EmphasizedDecelerate),
-                    ) { if (opening) -it / SlideFraction else it / SlideFraction }
-                    val exit = fadeOut(
-                        tween(FadeOutMillis, easing = MaaMotion.EmphasizedAccelerate),
-                    )
-                    enter.togetherWith(exit)
-                },
-                label = "tasksBody",
-                modifier = Modifier.weight(1f),
-            ) { open ->
-                TaskWorkspaceBody(
-                    logOpen = open,
-                    active = active,
-                    locked = locked,
-                    runLog = runLog,
-                    onExportLogs = onExportLogs,
-                    onIntent = onIntent,
-                    onRequestAddTasks = { showAddTasks = true },
-                    onEditTask = { editingTaskInstanceId = it },
+        AnimatedVisibility(visible = effectiveReorderMode) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.tasks_reorder_banner),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(R.string.common_done),
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .maaClickable(onClick = onExitReorder)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
-        } else {
+        }
+
+        AnimatedContent(
+            targetState = logOpen,
+            transitionSpec = {
+                val opening = targetState
+                val enter = fadeIn(
+                    tween(FadeInMillis, FadeInDelayMillis, MaaMotion.EmphasizedDecelerate),
+                ) + slideInVertically(
+                    tween(FadeInMillis, FadeInDelayMillis, MaaMotion.EmphasizedDecelerate),
+                ) { if (opening) -it / SlideFraction else it / SlideFraction }
+                val exit = fadeOut(
+                    tween(FadeOutMillis, easing = MaaMotion.EmphasizedAccelerate),
+                )
+                enter.togetherWith(exit)
+            },
+            label = "tasksBody",
+            modifier = Modifier.weight(1f),
+        ) { open ->
             TaskWorkspaceBody(
-                logOpen = false,
+                logOpen = open,
                 active = active,
                 locked = locked,
+                reorderMode = effectiveReorderMode,
                 runLog = runLog,
                 onExportLogs = onExportLogs,
                 onIntent = onIntent,
                 onRequestAddTasks = { showAddTasks = true },
                 onEditTask = { editingTaskInstanceId = it },
-                modifier = Modifier.weight(1f),
             )
         }
     }
 
     if (logOpen) {
-        BackHandler { showRunLog = false }
+        BackHandler { onCloseLog() }
+    } else if (effectiveReorderMode) {
+        BackHandler { onExitReorder() }
     }
 
     if (showAddTasks && active != null) {
@@ -168,6 +195,7 @@ private fun TaskWorkspaceBody(
     logOpen: Boolean,
     active: ResolvedRunConfiguration?,
     locked: Boolean,
+    reorderMode: Boolean,
     runLog: () -> List<RunLogEntry>,
     onExportLogs: () -> Unit,
     onIntent: (SessionIntent) -> Unit,
@@ -193,6 +221,7 @@ private fun TaskWorkspaceBody(
         else -> TaskList(
             active = active,
             locked = locked,
+            reorderMode = reorderMode,
             onIntent = onIntent,
             onRequestAddTasks = onRequestAddTasks,
             onEditTask = onEditTask,

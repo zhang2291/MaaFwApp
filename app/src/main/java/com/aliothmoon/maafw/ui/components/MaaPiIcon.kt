@@ -73,7 +73,17 @@ private object PiIconCache {
     suspend fun load(path: String, sizePx: Int, key: String): ImageBitmap? =
         withContext(MaaDispatchers.IO) {
             if (key in missing) return@withContext null
-            val file = File(AppPaths.ROOT, "${AppFiles.PI_DIR}/$path")
+            var file = File(AppPaths.ROOT, "${AppFiles.PI_DIR}/$path")
+            if (!file.exists()) {
+                val candidate = File(AppPaths.ROOT, "${AppFiles.PI_DIR}/resource/base/$path")
+                if (candidate.exists()) {
+                    file = candidate
+                }
+            }
+            if (!file.exists()) {
+                missing += key
+                return@withContext null
+            }
             runCatching {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 file.inputStream().use { BitmapFactory.decodeStream(it, null, bounds) }

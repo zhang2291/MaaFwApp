@@ -189,30 +189,19 @@ data class MaaStyleTokens(
 
 val DefaultStyleTokens = MaaStyleTokens(
     radii = MaaRadii(
-        card = 12.dp,
-        button = 10.dp,
-        inner = 8.dp,
-        segment = 4.dp,
-        large = 12.dp,
+        card = 14.dp,
+        button = 12.dp,
+        inner = 10.dp,
+        segment = 8.dp,
+        large = 20.dp,
     ),
     cardElevation = 1.dp,
 )
 
 /**
- * Semi Design 默认主题圆角（@douyinfe/semi-theme-default global.scss）
- * small=3 控件/chip；medium=6 菜单与卡片面；large=12 大容器
- * elevation 0 = 平面优先，层级靠 outline + surface 底色
+ * 保留枚举兼容旧持久化数据；两档统一映射到精密极简工业圆角体系
  */
-val SemiStyleTokens = MaaStyleTokens(
-    radii = MaaRadii(
-        card = 6.dp,
-        button = 3.dp,
-        inner = 3.dp,
-        segment = 2.dp,
-        large = 12.dp,
-    ),
-    cardElevation = 0.dp,
-)
+val SemiStyleTokens = DefaultStyleTokens
 
 fun styleTokensOf(style: ThemeStyle): MaaStyleTokens = when (style) {
     ThemeStyle.DEFAULT -> DefaultStyleTokens

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -17,8 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import com.aliothmoon.maafw.theme.MaaDesignTokens
 import com.aliothmoon.maafw.theme.MaaTheme
@@ -41,19 +42,19 @@ fun MaaChoiceChip(
     val interactionModifier = if (role == null) {
         Modifier.maaClickable(enabled = enabled, onClick = onClick)
     } else {
-        Modifier.selectable(
-            selected = selected,
-            enabled = enabled,
-            role = role,
-            onClick = onClick,
-        )
+        Modifier
+            .semantics {
+                this.selected = selected
+                this.role = role
+            }
+            .maaClickable(enabled = enabled, onClick = onClick)
     }
     Surface(
-        shape = RoundedCornerShape(MaaTheme.style.radii.button),
+        shape = RoundedCornerShape(MaaTheme.style.radii.inner),
         color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
+            MaterialTheme.colorScheme.primary
         } else {
-            Color.Transparent
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
         },
         border = BorderStroke(
             width = MaaDesignTokens.Separator.thickness,
@@ -64,7 +65,7 @@ fun MaaChoiceChip(
             },
         ),
         modifier = modifier
-            .alpha(if (enabled) 1f else 0.5f)
+            .alpha(if (enabled) 1f else 0.45f)
             .then(interactionModifier),
     ) {
         Row(
@@ -78,12 +79,11 @@ fun MaaChoiceChip(
             leading?.invoke()
             Text(
                 text = label,
-                // chip label：bodySmall(12) 提到 Medium，比 labelLarge(14) 收一档
                 style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 ),
                 color = if (selected) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
+                    MaterialTheme.colorScheme.onPrimary
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 },

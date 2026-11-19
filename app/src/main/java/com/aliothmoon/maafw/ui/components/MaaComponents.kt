@@ -1,7 +1,13 @@
 package com.aliothmoon.maafw.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -51,13 +57,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aliothmoon.maafw.domain.Diagnostic
 import com.aliothmoon.maafw.domain.DiagnosticSeverity
 import com.aliothmoon.maafw.i18n.asString
@@ -85,6 +97,28 @@ private val CardCollapse = shrinkVertically(
  *
  * 展开态只活在本次会话（[rememberSaveable]）——收起是临时整理视线，不是配置，不该进 DataStore
  */
+/** 精密极简工业卡片描边：暗色用 1px 顶部金属高光渐变，浅色用克制极细描边 */
+@Composable
+fun maaCardBorder(): BorderStroke {
+    val isDark = MaaTheme.isDark
+    return if (isDark) {
+        BorderStroke(
+            width = 1.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.13f),
+                    Color.White.copy(alpha = 0.045f),
+                ),
+            ),
+        )
+    } else {
+        BorderStroke(
+            width = 0.75.dp,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.75f),
+        )
+    }
+}
+
 @Composable
 fun MaaCard(
     modifier: Modifier = Modifier,
@@ -106,9 +140,12 @@ fun MaaCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = MaaTheme.style.cardElevation),
-        border = BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outline),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (MaaTheme.isDark) 0.dp else MaaTheme.style.cardElevation,
+        ),
+        border = maaCardBorder(),
     ) {
         Column(
             modifier = Modifier.padding(contentPadding),
@@ -394,14 +431,14 @@ fun MaaNavigationRow(
 fun MaaCardSurface(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.surface,
-    border: BorderStroke = BorderStroke(MaaDesignTokens.Separator.thickness, MaterialTheme.colorScheme.outline),
+    border: BorderStroke = maaCardBorder(),
     content: @Composable () -> Unit,
 ) {
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
         color = color,
-        shadowElevation = MaaTheme.style.cardElevation,
+        shadowElevation = if (MaaTheme.isDark) 0.dp else MaaTheme.style.cardElevation,
         border = border,
         content = content,
     )
@@ -415,14 +452,18 @@ fun MaaSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Switch(
         checked = checked,
         onCheckedChange = onCheckedChange,
         modifier = modifier,
         enabled = enabled,
         colors = SwitchDefaults.colors(
+            checkedThumbColor = scheme.onPrimary,
+            checkedTrackColor = scheme.primary,
             uncheckedThumbColor = MaaTheme.palette.switchOff,
-            uncheckedBorderColor = MaaTheme.palette.switchOff,
+            uncheckedBorderColor = MaaTheme.palette.switchOff.copy(alpha = 0.65f),
+            uncheckedTrackColor = scheme.surfaceVariant,
         ),
     )
 }
@@ -622,5 +663,153 @@ fun MaaToneBadge(
             style = MaterialTheme.typography.labelSmall,
             color = tone.content,
         )
+    }
+}
+
+/**
+ * 精密内凹分段滑块：外层低一层级凹槽（surfaceVariant），选中项浮起高对比表面（surface）
+ */
+@Composable
+fun <T> MaaInsetSegmentedControl(
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val trackShape = RoundedCornerShape(12.dp)
+    val thumbShape = RoundedCornerShape(9.dp)
+    Row(
+        modifier = modifier
+            .clip(trackShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                width = 0.5.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
+                shape = trackShape,
+            )
+            .padding(3.dp)
+            .alpha(if (enabled) 1f else MaaDesignTokens.Alpha.disabled),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEach { (value, label) ->
+            val isSelected = value == selected
+            Surface(
+                shape = thumbShape,
+                color = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                shadowElevation = if (isSelected && !MaaTheme.isDark) 1.dp else 0.dp,
+                border = if (isSelected && MaaTheme.isDark) {
+                    BorderStroke(0.75.dp, Color.White.copy(alpha = 0.10f))
+                } else {
+                    null
+                },
+                modifier = Modifier
+                    .clip(thumbShape)
+                    .maaClickable(enabled = enabled && !isSelected) { onSelect(value) },
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    ),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+/** 带柔和呼吸光圈的状态指示灯；pulse=false 时静默为纯点 */
+@Composable
+fun MaaPulsingDot(
+    color: Color,
+    modifier: Modifier = Modifier,
+    pulse: Boolean = true,
+    size: Dp = 8.dp,
+) {
+    Box(
+        modifier = modifier.size(size),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (pulse) {
+            val transition = rememberInfiniteTransition(label = "statusPulse")
+            val scale by transition.animateFloat(
+                initialValue = 1f,
+                targetValue = 2.15f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+                label = "pulseScale",
+            )
+            val alpha by transition.animateFloat(
+                initialValue = 0.5f,
+                targetValue = 0f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+                label = "pulseAlpha",
+            )
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        this.alpha = alpha
+                    }
+                    .clip(CircleShape)
+                    .background(color),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(color),
+        )
+    }
+}
+
+/** 设置页/分组外置标题：简洁淡色分组名 + 可选等宽英文角标 */
+@Composable
+fun MaaSectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    trailingTag: String? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = MaaDesignTokens.Spacing.xs),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!trailingTag.isNullOrBlank()) {
+            Text(
+                text = trailingTag,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.8.sp,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
     }
 }

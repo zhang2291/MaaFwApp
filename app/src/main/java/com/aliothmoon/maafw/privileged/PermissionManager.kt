@@ -159,7 +159,12 @@ class PermissionManager(
     override suspend fun quickGrant(permission: SystemPermission): Boolean {
         val bit = permission.grantBit
         val granted = grantViaPrivileged(bit) ?: return false
-        return granted and bit != 0
+        if (granted and bit == 0) return false
+        // 关键校验：在 Vivo/OriginOS 等国内系统中，Shell 代授可能静默失败。
+        // 若实际未生效，返回 false 以便调用方兜底拉起系统权限页让用户手点。
+        val actual = SystemPermissionRequester.isGranted(appContext, permission)
+        Timber.i("quickGrant permission=%s: privileged reported success, actual isGranted=%s", permission, actual)
+        return actual
     }
 
     /**

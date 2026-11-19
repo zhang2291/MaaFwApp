@@ -20,194 +20,122 @@ import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
 
-// 暖石色（stone）中性系，对齐早期原型 UI 观感
-private val LightBackground = Color(0xFFFAF9F6)
+// 精密极简工业（Titanium Silver / Anodized Dark Titanium）中性色阶
+private val LightBackground = Color(0xFFECECEF)
 private val LightSurface = Color(0xFFFFFFFF)
-private val LightSurfaceVariant = Color(0xFFF5F5F4)
-private val LightOnSurface = Color(0xFF1C1917)
-private val LightOnSurfaceVariant = Color(0xFF78716C)
-private val LightOutline = Color(0xFFE7E5E4)
+private val LightSurfaceVariant = Color(0xFFE4E4E8)
+private val LightOnSurface = Color(0xFF111113)
+private val LightOnSurfaceVariant = Color(0xFF63636B)
+private val LightOutline = Color(0xFFD8D8DF)
 
-private val DarkBackground = Color(0xFF121212)
-private val DarkSurface = Color(0xFF1C1C1E)
-private val DarkSurfaceVariant = Color(0xFF2C2C2E)
-private val DarkOnSurface = Color(0xFFFFFFFF)
-private val DarkOnSurfaceVariant = Color(0xFF98989D)
-private val DarkOutline = Color(0xFF3A3A3C)
+private val DarkBackground = Color(0xFF09090B)
+private val DarkSurface = Color(0xFF151519)
+private val DarkSurfaceVariant = Color(0xFF1E1E24)
+private val DarkOnSurface = Color(0xFFF4F4F5)
+private val DarkOnSurfaceVariant = Color(0xFF91919B)
+private val DarkOutline = Color(0xFF27272F)
 
 private fun createLightColorScheme(
     primary: Color,
+    onPrimary: Color,
     primaryContainer: Color,
     onPrimaryContainer: Color
 ): ColorScheme = lightColorScheme(
     primary = primary,
-    onPrimary = Color(0xFFFFFFFF),
+    onPrimary = onPrimary,
     primaryContainer = primaryContainer,
     onPrimaryContainer = onPrimaryContainer,
-    secondary = Color(0xFFA8A29E),
+    secondary = Color(0xFF52525B),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFF5F5F4),
-    onSecondaryContainer = Color(0xFF1C1917),
-    tertiary = primary.copy(alpha = 0.8f),
+    secondaryContainer = Color(0xFFE4E4E8),
+    onSecondaryContainer = Color(0xFF18181B),
+    tertiary = Color(0xFFC26D0A),
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = primaryContainer.copy(alpha = 0.5f),
-    onTertiaryContainer = onPrimaryContainer,
+    tertiaryContainer = Color(0xFFFEF3C7),
+    onTertiaryContainer = Color(0xFF78350F),
     background = LightBackground,
     onBackground = LightOnSurface,
     surface = LightSurface,
     onSurface = LightOnSurface,
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightOnSurfaceVariant,
-    // M3 baseline 的 surfaceContainer* 带紫调，会与暖石色盘冲突（sheet/menu 底色）；
-    // sheet 底（surfaceContainerLow）取 background 同源暖灰，衬白卡片建立层级
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = LightBackground,
-    surfaceContainer = Color(0xFFFAF9F6),
-    surfaceContainerHigh = Color(0xFFF5F5F4),
-    surfaceContainerHighest = Color(0xFFE7E5E4),
+    surfaceContainerLow = Color(0xFFF5F5F7),
+    surfaceContainer = Color(0xFFFFFFFF),
+    surfaceContainerHigh = Color(0xFFE9E9EE),
+    surfaceContainerHighest = Color(0xFFDCDCE3),
     outline = LightOutline,
-    outlineVariant = LightSurfaceVariant,
-    error = Color(0xfff53f3f),
+    outlineVariant = Color(0xFFE6E6EC),
+    error = Color(0xFFDC2626),
     onError = Color.White,
-    errorContainer = Color(0xFFFFD8D6),
-    onErrorContainer = Color(0xFF690005)
+    errorContainer = Color(0xFFFEE2E2),
+    onErrorContainer = Color(0xFF7F1D1D)
 )
 
 private fun createDarkColorScheme(
     primary: Color,
+    onPrimary: Color,
     primaryContainer: Color,
     onPrimaryContainer: Color
 ): ColorScheme = darkColorScheme(
     primary = primary,
-    onPrimary = Color(0xFFFFFFFF),
+    onPrimary = onPrimary,
     primaryContainer = primaryContainer,
     onPrimaryContainer = onPrimaryContainer,
-    secondary = Color(0xFF98989D),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFF2C2C2E),
-    onSecondaryContainer = Color(0xFFE5E5EA),
-    tertiary = primary.copy(alpha = 0.8f),
-    onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = primaryContainer.copy(alpha = 0.5f),
-    onTertiaryContainer = onPrimaryContainer,
+    secondary = Color(0xFFA1A1AA),
+    onSecondary = Color(0xFF09090B),
+    secondaryContainer = Color(0xFF202026),
+    onSecondaryContainer = Color(0xFFE4E4E7),
+    tertiary = Color(0xFFFBBF24),
+    onTertiary = Color(0xFF1C1404),
+    tertiaryContainer = Color(0xFF452B06),
+    onTertiaryContainer = Color(0xFFFDE68A),
     background = DarkBackground,
     onBackground = DarkOnSurface,
     surface = DarkSurface,
     onSurface = DarkOnSurface,
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkOnSurfaceVariant,
-    surfaceContainerLowest = Color(0xFF0F0F0F),
-    surfaceContainerLow = DarkBackground,
-    surfaceContainer = Color(0xFF232325),
-    surfaceContainerHigh = Color(0xFF2C2C2E),
-    surfaceContainerHighest = Color(0xFF3A3A3C),
+    surfaceContainerLowest = Color(0xFF060608),
+    surfaceContainerLow = Color(0xFF111115),
+    surfaceContainer = Color(0xFF17171C),
+    surfaceContainerHigh = Color(0xFF212128),
+    surfaceContainerHighest = Color(0xFF2B2B34),
     outline = DarkOutline,
-    outlineVariant = DarkSurfaceVariant,
-    error = Color(0xFFFF453A),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6)
+    outlineVariant = Color(0xFF1E1E25),
+    error = Color(0xFFF87171),
+    onError = Color(0xFF450A0A),
+    errorContainer = Color(0xFF451215),
+    onErrorContainer = Color(0xFFFECACA)
 )
 
-private val BlueLight = createLightColorScheme(
-    primary = Color(0xFF2563EB),
-    primaryContainer = Color(0xFFDBEAFE),
-    onPrimaryContainer = Color(0xFF1E3A8A)
+private val PrecisionLight = createLightColorScheme(
+    primary = Color(0xFF18181B),
+    onPrimary = Color(0xFFFAFAFA),
+    primaryContainer = Color(0xFFE4E4EA),
+    onPrimaryContainer = Color(0xFF111113),
 )
 
-private val BlueDark = createDarkColorScheme(
-    primary = Color(0xFF3B82F6),
-    primaryContainer = Color(0xFF1E3A8A),
-    onPrimaryContainer = Color(0xFFDBEAFE)
+private val PrecisionDark = createDarkColorScheme(
+    primary = Color(0xFFF4F4F5),
+    onPrimary = Color(0xFF09090B),
+    primaryContainer = Color(0xFF272730),
+    onPrimaryContainer = Color(0xFFF4F4F5),
 )
 
-/** 可选主题风格；DEFAULT 是暖石色 + 蓝，SEMI_DESIGN 取 Semi Design 的冷灰 + 品牌蓝 */
+/** 保留枚举兼容旧 DataStore 持久化；统一映射到精密极简工业体系 */
 enum class ThemeStyle { DEFAULT, SEMI_DESIGN }
-
-// Semi Design 默认主题配色；色值取自 @douyinfe/semi-theme-default 的 _palette.scss / global.scss
-// （primary=blue-5 #0064FA，中性 grey 冷灰，暗色 palette 反转）
-private val SemiLight = lightColorScheme(
-    primary = Color(0xFF0064FA),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFEAF5FF),
-    onPrimaryContainer = Color(0xFF004FB3),
-    secondary = Color(0xFF6B7075),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFF9F9F9),
-    onSecondaryContainer = Color(0xFF1C1F23),
-    tertiary = Color(0xFF0064FA),
-    onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFEAF5FF),
-    onTertiaryContainer = Color(0xFF004FB3),
-    background = Color(0xFFFFFFFF),
-    onBackground = Color(0xFF1C1F23),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF1C1F23),
-    surfaceVariant = Color(0xFFF9F9F9),
-    onSurfaceVariant = Color(0xFF555B61),
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF6F6F6),
-    surfaceContainer = Color(0xFFFFFFFF),
-    surfaceContainerHigh = Color(0xFFF9F9F9),
-    surfaceContainerHighest = Color(0xFFE6E8EA),
-    outline = Color(0xFFC6CACD),
-    outlineVariant = Color(0xFFE6E8EA),
-    error = Color(0xFFF93920),
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFFEDDD2),
-    onErrorContainer = Color(0xFF6A0103),
-)
-
-private val SemiDark = darkColorScheme(
-    primary = Color(0xFF54A9FF),
-    onPrimary = Color(0xFF053170),
-    primaryContainer = Color(0xFF053170),
-    onPrimaryContainer = Color(0xFF54A9FF),
-    secondary = Color(0xFFA7ABB0),
-    onSecondary = Color(0xFF1C1F23),
-    secondaryContainer = Color(0xFF2E3238),
-    onSecondaryContainer = Color(0xFFF9F9F9),
-    tertiary = Color(0xFF54A9FF),
-    onTertiary = Color(0xFF053170),
-    tertiaryContainer = Color(0xFF053170),
-    onTertiaryContainer = Color(0xFF54A9FF),
-    background = Color(0xFF16161A),
-    onBackground = Color(0xFFF9F9F9),
-    surface = Color(0xFF16161A),
-    onSurface = Color(0xFFF9F9F9),
-    surfaceVariant = Color(0xFF2E3238),
-    onSurfaceVariant = Color(0xFFA7ABB0),
-    surfaceContainerLowest = Color(0xFF0F0F12),
-    surfaceContainerLow = Color(0xFF16161A),
-    surfaceContainer = Color(0xFF232429),
-    surfaceContainerHigh = Color(0xFF35363C),
-    surfaceContainerHighest = Color(0xFF43444A),
-    outline = Color(0xFF41464C),
-    outlineVariant = Color(0xFF2E3238),
-    error = Color(0xFFFC725A),
-    onError = Color(0xFF6A0103),
-    errorContainer = Color(0xFF901110),
-    onErrorContainer = Color(0xFFFDBEAC),
-)
 
 /** 徽章/状态用的语义配色对：content + container */
 data class MaaTone(val content: Color, val container: Color)
 
-/** M3 colorScheme 之外的语义扩展色（成功/警示/信息/强调），随风格 × 明暗切换 */
+/** M3 colorScheme 之外的语义扩展色（成功/警示/信息/强调），随明暗切换 */
 data class MaaPalette(
     val success: MaaTone,
     val warning: MaaTone,
     val info: MaaTone,
     val violet: MaaTone,
     val neutral: MaaTone,
-    /**
-     * 未选中开关的滑块与描边
-     *
-     * 单开一档是因为四套 scheme 里没有现成角色能接：`outline` 在暖石亮色下与
-     * `surfaceContainerHighest`（未选中轨道）同为 `#E7E5E4`，滑块会整个糊进轨道；
-     * 退回 `onSurfaceVariant` 又是中性色里最重的一档，整圈描边压得慌。
-     * 取值落在两者中间——亮色比轨道深一档可辨即可，暗色维持原亮度
-     */
     val switchOff: Color,
 ) {
     /** 按稳定顺序取一组强调色，用于分组徽章、任务色条等 */
@@ -216,42 +144,20 @@ data class MaaPalette(
 
 private val LightMaaPalette = MaaPalette(
     success = MaaTone(Color(0xFF059669), Color(0xFFD1FAE5)),
-    warning = MaaTone(Color(0xFFB45309), Color(0xFFFEF3C7)),
+    warning = MaaTone(Color(0xFFC26D0A), Color(0xFFFEF3C7)),
     info = MaaTone(Color(0xFF0284C7), Color(0xFFE0F2FE)),
     violet = MaaTone(Color(0xFF7C3AED), Color(0xFFEDE9FE)),
-    neutral = MaaTone(Color(0xFF78716C), Color(0xFFF5F5F4)),
-    // stone-400：比轨道 stone-200 深一档，比 onSurfaceVariant（stone-500）轻
-    switchOff = Color(0xFFA8A29E),
+    neutral = MaaTone(Color(0xFF63636B), Color(0xFFEAEAEF)),
+    switchOff = Color(0xFF9A9AA3),
 )
 
 private val DarkMaaPalette = MaaPalette(
-    success = MaaTone(Color(0xFF34D399), Color(0xFF064E3B)),
-    warning = MaaTone(Color(0xFFFBBF24), Color(0xFF78350F)),
-    info = MaaTone(Color(0xFF38BDF8), Color(0xFF0C4A6E)),
-    violet = MaaTone(Color(0xFFA78BFA), Color(0xFF4C1D95)),
-    neutral = MaaTone(Color(0xFF98989D), Color(0xFF2C2C2E)),
-    // 暗色下轨道本就深，滑块再压就看不见了；维持 onSurfaceVariant 的亮度
-    switchOff = Color(0xFF98989D),
-)
-
-// Semi 功能色：success=green-5、warning=orange-5、info=blue-5、violet=violet-5（global.scss）
-private val SemiLightMaaPalette = MaaPalette(
-    success = MaaTone(Color(0xFF3BB346), Color(0xFFECF7EC)),
-    warning = MaaTone(Color(0xFFFC8800), Color(0xFFFFF8EA)),
-    info = MaaTone(Color(0xFF0064FA), Color(0xFFEAF5FF)),
-    violet = MaaTone(Color(0xFF6A3AC7), Color(0xFFF3EDF9)),
-    neutral = MaaTone(Color(0xFF6B7075), Color(0xFFF9F9F9)),
-    // Semi 的边框色 grey-3；它自己的开关关闭态描边是 transparent、滑块纯白，比这还轻
-    switchOff = Color(0xFFC6CACD),
-)
-
-private val SemiDarkMaaPalette = MaaPalette(
-    success = MaaTone(Color(0xFF6BCF7A), Color(0xFF1A3D1F)),
-    warning = MaaTone(Color(0xFFFFB84D), Color(0xFF4A2800)),
-    info = MaaTone(Color(0xFF54A9FF), Color(0xFF053170)),
-    violet = MaaTone(Color(0xFF9B7CF0), Color(0xFF2A1A5C)),
-    neutral = MaaTone(Color(0xFFA7ABB0), Color(0xFF2E3238)),
-    switchOff = Color(0xFFA7ABB0),
+    success = MaaTone(Color(0xFF34D399), Color(0xFF0A2E22)),
+    warning = MaaTone(Color(0xFFFBBF24), Color(0xFF3B2608)),
+    info = MaaTone(Color(0xFF38BDF8), Color(0xFF0C2D48)),
+    violet = MaaTone(Color(0xFFA78BFA), Color(0xFF2D1B54)),
+    neutral = MaaTone(Color(0xFF91919B), Color(0xFF222229)),
+    switchOff = Color(0xFF787885),
 )
 
 val LocalMaaPalette = staticCompositionLocalOf { LightMaaPalette }
@@ -259,6 +165,8 @@ val LocalMaaPalette = staticCompositionLocalOf { LightMaaPalette }
 val LocalMaaStyleTokens = staticCompositionLocalOf { DefaultStyleTokens }
 
 val LocalThemeStyle = staticCompositionLocalOf { ThemeStyle.DEFAULT }
+
+val LocalIsDarkTheme = staticCompositionLocalOf { false }
 
 /** 主题扩展读取入口；Screen 不直接碰 DataStore / ThemeStyle 分支 */
 object MaaTheme {
@@ -276,15 +184,13 @@ object MaaTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalThemeStyle.current
+
+    val isDark: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalIsDarkTheme.current
 }
 
-/**
- * M3 的 [Shapes] 五档全是**容器**圆角，没有一档表示胶囊——胶囊在 M3 里走 `CornerFull`，
- * 直接解析成 `CircleShape`，不经过这个对象
- *
- * 所以 extraLarge 只能给大容器档：它是 DatePickerDialog / TimePickerDialog / ModalBottomSheet
- * 的默认容器形状，喂胶囊半径进去，对话框会缩成椭圆并把自己的标题与按钮裁掉
- */
 private fun shapesOf(tokens: MaaStyleTokens): Shapes = Shapes(
     extraSmall = RoundedCornerShape(tokens.radii.inner),
     small = RoundedCornerShape(tokens.radii.button),
@@ -294,13 +200,11 @@ private fun shapesOf(tokens: MaaStyleTokens): Shapes = Shapes(
 )
 
 private fun colorSchemeOf(style: ThemeStyle, dark: Boolean): ColorScheme = when (style) {
-    ThemeStyle.DEFAULT -> if (dark) BlueDark else BlueLight
-    ThemeStyle.SEMI_DESIGN -> if (dark) SemiDark else SemiLight
+    ThemeStyle.DEFAULT, ThemeStyle.SEMI_DESIGN -> if (dark) PrecisionDark else PrecisionLight
 }
 
 private fun paletteOf(style: ThemeStyle, dark: Boolean): MaaPalette = when (style) {
-    ThemeStyle.DEFAULT -> if (dark) DarkMaaPalette else LightMaaPalette
-    ThemeStyle.SEMI_DESIGN -> if (dark) SemiDarkMaaPalette else SemiLightMaaPalette
+    ThemeStyle.DEFAULT, ThemeStyle.SEMI_DESIGN -> if (dark) DarkMaaPalette else LightMaaPalette
 }
 
 private object NoIndication : IndicationNodeFactory {
@@ -334,6 +238,7 @@ fun MaaFwTheme(
         LocalMaaPalette provides palette,
         LocalMaaStyleTokens provides styleTokens,
         LocalThemeStyle provides themeStyle,
+        LocalIsDarkTheme provides darkTheme,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

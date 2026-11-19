@@ -1,35 +1,40 @@
 package com.aliothmoon.maafw.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,47 +44,53 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import com.aliothmoon.maafw.BuildConfig
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aliothmoon.maafw.R
 import com.aliothmoon.maafw.domain.DiagnosticSeverity
-import com.aliothmoon.maafw.domain.OverlayControlMode
-import com.aliothmoon.maafw.domain.RemoteBackend
-import com.aliothmoon.maafw.domain.RunMode
+import com.aliothmoon.maafw.i18n.asString
+import com.aliothmoon.maafw.privileged.PrivilegedServiceState
 import com.aliothmoon.maafw.privileged.SystemPermission
 import com.aliothmoon.maafw.project.ProjectState
-import com.aliothmoon.maafw.privileged.PrivilegedServiceState
+import com.aliothmoon.maafw.runner.isBusy
 import com.aliothmoon.maafw.session.ServiceStatus
 import com.aliothmoon.maafw.session.SessionIntent
-import com.aliothmoon.maafw.session.StatusTone
-import com.aliothmoon.maafw.runner.screenSize
 import com.aliothmoon.maafw.session.SessionUiState
-import com.aliothmoon.maafw.i18n.asString
-import com.aliothmoon.maafw.ui.i18n.diagnosticsSummaryUiText
-import com.aliothmoon.maafw.theme.MaaDesignTokens
-import com.aliothmoon.maafw.ui.components.MaaButton
-import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
-import com.aliothmoon.maafw.ui.components.MaaSemanticOutlinedButton
-import com.aliothmoon.maafw.ui.components.MaaCard
-import com.aliothmoon.maafw.ui.components.MaaDiagnosticList
-import com.aliothmoon.maafw.ui.components.MaaInfoRow
-import com.aliothmoon.maafw.ui.components.MaaLabeledControlRow
-import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
-import com.aliothmoon.maafw.ui.components.MaaSwitch
+import com.aliothmoon.maafw.session.StatusTone
 import com.aliothmoon.maafw.settings.ResourceUpdatePanelState
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.UpdatePanelState
+import com.aliothmoon.maafw.theme.MaaDesignTokens
+import com.aliothmoon.maafw.theme.MaaTheme
+import com.aliothmoon.maafw.ui.components.MaaButton
+import com.aliothmoon.maafw.ui.components.MaaCard
+import com.aliothmoon.maafw.ui.components.MaaDiagnosticList
+import com.aliothmoon.maafw.ui.components.MaaIconBadge
+import com.aliothmoon.maafw.ui.components.MaaLabeledControlRow
+import com.aliothmoon.maafw.ui.components.MaaOutlinedButton
+import com.aliothmoon.maafw.ui.components.MaaPulsingDot
+import com.aliothmoon.maafw.ui.components.MaaSemanticOutlinedButton
+import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
+import com.aliothmoon.maafw.ui.components.maaCardBorder
 import com.aliothmoon.maafw.ui.components.maaClickable
+import com.aliothmoon.maafw.ui.i18n.diagnosticsSummaryUiText
 
 /**
- * 首页版面对齐 MaaMeow：概览（含更新区块）-> 资源 -> 运行模式 -> 权限 -> 服务入口 -> 诊断
- * 资源选择、运行模式与更新源/渠道从设置页迁来，避免与任务页重复；
- * 启动自检与自动下载开关仍在设置页
+ * 精密极简工业首页：
+ * 顶栏（应用名 + 服务器徽标 + 呼吸状态灯）
+ * -> 自动化引擎服务 Hero 主卡
+ * -> 今日执行任务队列速览卡
+ * -> 权限管理卡（后台 4 项精简，已修复系统页兜底拉起）
+ * -> 多服务器切换（>1 个时显示）
+ * -> 版本与资源更新卡
+ * -> 诊断卡（仅异常时显示）
+ * -> MBCC 终端暗纹铭牌
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     state: SessionUiState,
@@ -87,30 +98,18 @@ fun HomeScreen(
     update: UpdatePanelState,
     resourceUpdate: ResourceUpdatePanelState,
     onSettingsIntent: (SettingsIntent) -> Unit,
+    onNavigateToTasks: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    // 取 app 标签（profile 的 app.label）而非 PI 的 name：后者是 PI 自己的标识符，不是对外呈现的名字
     val context = LocalContext.current
     val appLabel = remember(context) {
         context.applicationInfo.loadLabel(context.packageManager).toString()
     }
-    // 标题钉在顶部不随内容滚动
     Column(modifier = modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = appLabel,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            },
-            // AppRoot 的 Scaffold 已吃掉状态栏顶部 inset，这里不能再加一次
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background,
-                titleContentColor = MaterialTheme.colorScheme.onBackground,
-                actionIconContentColor = MaterialTheme.colorScheme.primary,
-            ),
+        HomeHeader(
+            appLabel = appLabel,
+            resourceLabel = state.environment?.resource?.label,
+            status = state.serviceStatus,
         )
         Column(
             modifier = Modifier
@@ -120,154 +119,436 @@ fun HomeScreen(
                 .padding(
                     start = MaaDesignTokens.Spacing.lg,
                     end = MaaDesignTokens.Spacing.lg,
-                    top = MaaDesignTokens.Spacing.sm,
+                    top = MaaDesignTokens.Spacing.xs,
                     bottom = MaaDesignTokens.Spacing.lg,
                 ),
             verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
         ) {
-            OverviewCard(state, update, resourceUpdate, onSettingsIntent)
-            ResourceCard(state, onIntent)
-            RunModeCard(state, onIntent)
-            PermissionCard(state, onIntent)
-            ServiceActionButtons(state, onIntent)
+            HeroServiceCard(
+                state = state,
+                onIntent = onIntent,
+                onNavigateToTasks = onNavigateToTasks,
+            )
+            ActiveQueueCard(
+                state = state,
+                onIntent = onIntent,
+                onNavigateToTasks = onNavigateToTasks,
+            )
+            PermissionsCard(state, onIntent)
+            if ((state.environment?.resourceCandidates?.size ?: 0) > 1) {
+                ResourceCard(state, onIntent)
+            }
+            UnifiedUpdatesCard(
+                update = update,
+                resourceUpdate = resourceUpdate,
+                onSettingsIntent = onSettingsIntent,
+            )
             ProjectDiagnosticsCard(state)
+            TerminalFooterPlate()
         }
     }
 }
 
 @Composable
-private fun OverviewCard(
-    state: SessionUiState,
-    update: UpdatePanelState,
-    resourceUpdate: ResourceUpdatePanelState,
-    onSettingsIntent: (SettingsIntent) -> Unit,
+private fun HomeHeader(
+    appLabel: String,
+    resourceLabel: String?,
+    status: ServiceStatus,
 ) {
-    // 分辨率展示用设备真实屏幕尺寸（Misc.getScreenSize），与前后台 / 虚拟屏偏好无关
-    val context = LocalContext.current
-    val screen = remember(context) { screenSize(context) }
-    MaaCard(title = stringResource(R.string.home_overview)) {
-        MaaInfoRow(
-            stringResource(R.string.home_display_resolution),
-            "${screen.width} × ${screen.height}",
-        )
-        MaaInfoRow(stringResource(R.string.settings_version), BuildConfig.VERSION_NAME)
-        MaaLabeledControlRow(
-            label = stringResource(R.string.home_service_status),
-            labelStyle = MaterialTheme.typography.bodyMedium,
-            labelColor = MaterialTheme.colorScheme.onSurface,
-            trailing = { ServiceStatusIndicator(status = state.serviceStatus) },
-        )
-        UpdateSection(update, onSettingsIntent)
-        ResourceUpdateSection(resourceUpdate, onSettingsIntent)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = MaaDesignTokens.Spacing.lg,
+                end = MaaDesignTokens.Spacing.lg,
+                top = MaaDesignTokens.Spacing.md,
+                bottom = MaaDesignTokens.Spacing.xs,
+            ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = appLabel,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = maaCardBorder(),
+                ) {
+                    Text(
+                        text = resourceLabel ?: "官服",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                    )
+                }
+            }
+            Text(
+                text = "AUTOMATION CONSOLE",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.2.sp,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
+
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = maaCardBorder(),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                val dotColor = when (status.tone) {
+                    StatusTone.Primary -> MaterialTheme.colorScheme.primary
+                    StatusTone.Warning -> MaaTheme.palette.warning.content
+                    StatusTone.Error -> MaterialTheme.colorScheme.error
+                    StatusTone.Neutral -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                MaaPulsingDot(color = dotColor, pulse = status.busy)
+                Text(
+                    text = status.text.asString(),
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroServiceCard(
+    state: SessionUiState,
+    onIntent: (SessionIntent) -> Unit,
+    onNavigateToTasks: () -> Unit,
+) {
+    val connected = state.privilegedServiceConnected
+
+    MaaCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = if (connected) "自动化引擎服务" else "特权服务未连接",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = when {
+                        connected -> "通道稳定，可随时前往任务页执行"
+                        else -> "需要 Shizuku 授权以创建虚拟显示屏"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            val badgeTone = if (connected) MaaTheme.palette.success else MaaTheme.palette.warning
+            MaaIconBadge(
+                icon = if (connected) Icons.Outlined.Check else Icons.Outlined.Bolt,
+                containerColor = badgeTone.container,
+                contentColor = badgeTone.content,
+                containerSize = 40.dp,
+            )
+        }
+
+        Spacer(Modifier.height(MaaDesignTokens.Spacing.xs))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (connected) {
+                MaaSemanticOutlinedButton(
+                    onClick = { onIntent(SessionIntent.TogglePrivilegedService) },
+                    semantic = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LinkOff,
+                        contentDescription = null,
+                        modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.home_service_disconnect), maxLines = 1)
+                }
+                MaaButton(
+                    onClick = onNavigateToTasks,
+                    modifier = Modifier.weight(1.2f),
+                ) {
+                    Text("去执行 →", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            } else {
+                MaaButton(
+                    onClick = { onIntent(SessionIntent.TogglePrivilegedService) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Link,
+                        contentDescription = null,
+                        modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.home_service_connect), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
     }
 }
 
 /**
- * 状态点 + 文案 + 忙时转圈
- *
- * 语气到颜色的映射只此一处；`StatusTone.Warning` 在 M3 里没有对应槽位，
- * 用 tertiary 而不是自造颜色——深色主题下自造色多半会撞背景
+ * 首页执行队列概览卡片：
+ * 展示当前配置名、已勾选的任务胶囊流、就绪统计与直接开始按钮，
+ * 让用户在首页就能一眼看清今天要执行的任务并直接启动，充实页面布局。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ServiceStatusIndicator(status: ServiceStatus) {
-    val color = when (status.tone) {
-        StatusTone.Primary -> MaterialTheme.colorScheme.primary
-        StatusTone.Warning -> MaterialTheme.colorScheme.tertiary
-        StatusTone.Error -> MaterialTheme.colorScheme.error
-        StatusTone.Neutral -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(MaaDesignTokens.IconSize.dotMd)
-                .clip(CircleShape)
-                .background(color),
-        )
-        Text(
-            text = status.text.asString(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = color,
-        )
-        if (status.busy) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(MaaDesignTokens.IconSize.xs),
-                strokeWidth = MaaDesignTokens.Border.marker,
-                color = color,
+private fun ActiveQueueCard(
+    state: SessionUiState,
+    onIntent: (SessionIntent) -> Unit,
+    onNavigateToTasks: () -> Unit,
+) {
+    val activeConfig = state.activeConfiguration ?: return
+    val enabledTasks = activeConfig.tasks.filter { it.enabled }
+    val totalCount = activeConfig.tasks.size
+    val isBusy = state.runner.phase.isBusy
+
+    MaaCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "今日执行队列",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "配置：${activeConfig.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "${enabledTasks.size}/$totalCount 项就绪",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFeatureSettings = "tnum",
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = if (enabledTasks.isNotEmpty()) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
+        }
+
+        if (enabledTasks.isEmpty()) {
+            Text(
+                text = "暂无启用的任务，请前往任务页勾选",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        } else {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                enabledTasks.forEachIndexed { index, task ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        border = maaCardBorder(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = (index + 1).toString().padStart(2, '0'),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                ),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            )
+                            Text(
+                                text = task.label,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MaaOutlinedButton(
+                onClick = onNavigateToTasks,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("配置任务 →", maxLines = 1)
+            }
+            MaaButton(
+                onClick = {
+                    if (isBusy) {
+                        onIntent(SessionIntent.Stop)
+                    } else {
+                        onIntent(SessionIntent.Start())
+                    }
+                },
+                enabled = isBusy || state.canStart,
+                colors = if (isBusy) {
+                    ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                } else {
+                    ButtonDefaults.buttonColors()
+                },
+                modifier = Modifier.weight(1.3f),
+            ) {
+                Icon(
+                    imageVector = if (isBusy) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = if (isBusy) "停止任务" else "一键开始",
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
 
-
+/** 后台权限管理：保留后台静默运行真正需要的 4 项，告别无用悬浮窗/无障碍骚扰 */
 @Composable
-private fun PermissionCard(state: SessionUiState, onIntent: (SessionIntent) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val access = state.remoteAccess
-    // 特权进程在线时这几项都能就地代授，按钮文案跟着换：点下去不跳系统页
+private fun PermissionsCard(
+    state: SessionUiState,
+    onIntent: (SessionIntent) -> Unit,
+) {
+    var permsExpanded by remember { mutableStateOf(false) }
+    val perms = state.systemPermissions
+    val grantedCount = listOf(
+        state.remoteAccessGranted,
+        perms.batteryWhitelist,
+        perms.notification,
+        perms.storage,
+    ).count { it }
+    val totalCount = 4
+    val allGranted = grantedCount == totalCount
+
     val requestText = stringResource(
-        if (state.privilegedServiceConnected) {
-            R.string.permission_quick_grant
-        } else {
-            R.string.permission_request
-        },
+        if (state.privilegedServiceConnected) R.string.permission_quick_grant
+        else R.string.permission_request,
     )
-    MaaCard(title = stringResource(R.string.permission_section)) {
-        PermissionRow(
-            label = access.configuredBackend.display,
-            granted = state.remoteAccessGranted,
-            loading = state.remoteAccessGranting,
-            onRequest = { onIntent(SessionIntent.RequestRemoteAccess) },
-        )
 
-        ExpandToggle(expanded = expanded, onToggle = { expanded = !expanded })
-
-        AnimatedVisibility(visible = expanded) {
-            // 行间不再另加间距：每行已经定高 32dp，再叠 8dp 会把五行拉得比卡片其余部分都松
-            Column {
-                PermissionRow(
-                    label = stringResource(R.string.permission_overlay),
-                    granted = state.systemPermissions.overlay,
-                    requestText = requestText,
-                    onRequest = {
-                        onIntent(SessionIntent.RequestSystemPermission(SystemPermission.Overlay))
-                    },
+    MaaCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .maaClickable(indication = false) { permsExpanded = !permsExpanded }
+                .padding(vertical = MaaDesignTokens.Spacing.xs),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.permission_section),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.xs),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (allGranted) R.string.home_permissions_ready
+                        else R.string.home_permissions_incomplete,
+                        grantedCount,
+                        totalCount,
+                    ),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFeatureSettings = "tnum",
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = if (allGranted) MaaTheme.palette.success.content else MaaTheme.palette.warning.content,
                 )
+                Icon(
+                    imageVector = if (permsExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(MaaDesignTokens.IconSize.md),
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = permsExpanded) {
+            Column(modifier = Modifier.padding(top = MaaDesignTokens.Spacing.xs)) {
                 PermissionRow(
-                    label = stringResource(R.string.permission_storage),
-                    granted = state.systemPermissions.storage,
-                    requestText = requestText,
-                    onRequest = {
-                        onIntent(SessionIntent.RequestSystemPermission(SystemPermission.Storage))
-                    },
+                    label = state.remoteAccess.configuredBackend.display,
+                    granted = state.remoteAccessGranted,
+                    loading = state.remoteAccessGranting,
+                    onRequest = { onIntent(SessionIntent.RequestRemoteAccess) },
                 )
                 PermissionRow(
                     label = stringResource(R.string.permission_battery),
-                    granted = state.systemPermissions.batteryWhitelist,
+                    granted = perms.batteryWhitelist,
                     grantedText = stringResource(R.string.permission_battery_added),
                     requestText = requestText,
                     onRequest = {
-                        onIntent(
-                            SessionIntent.RequestSystemPermission(SystemPermission.BatteryWhitelist),
-                        )
-                    },
-                )
-                PermissionRow(
-                    label = stringResource(R.string.permission_accessibility),
-                    granted = state.systemPermissions.accessibility,
-                    requestText = requestText,
-                    onRequest = {
-                        onIntent(SessionIntent.RequestSystemPermission(SystemPermission.Accessibility))
+                        onIntent(SessionIntent.RequestSystemPermission(SystemPermission.BatteryWhitelist))
                     },
                 )
                 PermissionRow(
                     label = stringResource(R.string.permission_notification),
-                    granted = state.systemPermissions.notification,
+                    granted = perms.notification,
                     requestText = requestText,
                     onRequest = {
                         onIntent(SessionIntent.RequestSystemPermission(SystemPermission.Notification))
+                    },
+                )
+                PermissionRow(
+                    label = stringResource(R.string.permission_storage),
+                    granted = perms.storage,
+                    requestText = requestText,
+                    onRequest = {
+                        onIntent(SessionIntent.RequestSystemPermission(SystemPermission.Storage))
                     },
                 )
                 Text(
@@ -300,14 +581,13 @@ private fun PermissionRow(
                 enabled = !granted && !loading,
                 modifier = Modifier.height(MaaDesignTokens.RowHeight.compact),
                 contentPadding = PaddingValues(horizontal = MaaDesignTokens.Spacing.sm),
-                // 已授权是状态而不是「不可用」，禁用态仍按主色显示
                 colors = ButtonDefaults.textButtonColors(
-                    disabledContentColor = MaterialTheme.colorScheme.primary,
+                    disabledContentColor = MaaTheme.palette.success.content,
                 ),
             ) {
                 if (loading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(MaaDesignTokens.IconSize.md),
+                        modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
                         strokeWidth = MaaDesignTokens.Border.marker,
                     )
                 } else {
@@ -316,101 +596,6 @@ private fun PermissionRow(
             }
         },
     )
-}
-
-@Composable
-private fun ExpandToggle(expanded: Boolean, onToggle: () -> Unit) {
-    val tint = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .maaClickable(onClick = onToggle)
-            .padding(vertical = MaaDesignTokens.Spacing.xs),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(
-                if (expanded) R.string.permission_collapse else R.string.permission_expand,
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = tint,
-        )
-        Icon(
-            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
-        )
-    }
-}
-
-/** 服务入口；启动/停止特权服务的开关还没做（见 TODO） */
-@Composable
-private fun ServiceActionButtons(state: SessionUiState, onIntent: (SessionIntent) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md)) {
-        val connected = state.privilegedServiceConnected
-        // 连接中图标位换转圈；颜色跟 LocalContentColor 才能吃到禁用态透明度
-        val connecting = state.privilegedService == PrivilegedServiceState.Connecting
-        // 对齐 MaaMeow：描边跟内容同语义色，不用默认灰描边；断开是破坏性动作压一档透明度
-        val semantic = if (connected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-        MaaSemanticOutlinedButton(
-            onClick = { onIntent(SessionIntent.TogglePrivilegedService) },
-            // 连接中不给点：这时候再发一次 bind 只会把状态搅乱
-            enabled = !connecting,
-            semantic = semantic,
-            contentAlpha = if (connected) 0.82f else 1f,
-            borderAlpha = if (connected) 0.45f else 0.55f,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(MaaDesignTokens.ButtonHeight.prominent),
-        ) {
-            if (connecting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(MaaDesignTokens.IconSize.md),
-                    strokeWidth = MaaDesignTokens.Border.marker,
-                    color = LocalContentColor.current,
-                )
-            } else {
-                Icon(
-                    imageVector = if (connected) Icons.Outlined.LinkOff else Icons.Outlined.Link,
-                    contentDescription = null,
-                    modifier = Modifier.size(MaaDesignTokens.IconSize.md),
-                )
-            }
-            Box(Modifier.size(MaaDesignTokens.Spacing.sm))
-            Text(
-                stringResource(
-                    if (connected) R.string.home_service_disconnect else R.string.home_service_connect,
-                ),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-        if (state.remoteAccess.configuredBackend == RemoteBackend.SHIZUKU) {
-            MaaSemanticOutlinedButton(
-                onClick = { onIntent(SessionIntent.OpenShizuku) },
-                semantic = MaterialTheme.colorScheme.secondary,
-                contentAlpha = 1f,
-                borderAlpha = 0.55f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(MaaDesignTokens.ButtonHeight.prominent),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Build,
-                    contentDescription = null,
-                    modifier = Modifier.size(MaaDesignTokens.IconSize.md),
-                )
-                Box(Modifier.size(MaaDesignTokens.Spacing.sm))
-                Text(
-                    stringResource(R.string.permission_open_shizuku),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-    }
 }
 
 /** 项目加载失败或有诊断时才出现；正常态不占版面 */
@@ -428,7 +613,7 @@ private fun ProjectDiagnosticsCard(state: SessionUiState) {
                 CircularProgressIndicator(modifier = Modifier.padding(MaaDesignTokens.Spacing.xs))
                 Text(
                     stringResource(R.string.home_project_loading),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
 
@@ -457,114 +642,7 @@ private fun ProjectDiagnosticsCard(state: SessionUiState) {
     }
 }
 
-@Composable
-private fun RunModeCard(state: SessionUiState, onIntent: (SessionIntent) -> Unit) {
-    // 单行：左 "运行模式"，右 当前模式名 + 开关（对齐 MaaMeow）
-    MaaCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.settings_run_mode),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-            ) {
-                Text(
-                    text = stringResource(
-                        if (state.runMode == RunMode.BACKGROUND) R.string.settings_run_mode_background
-                        else R.string.settings_run_mode_foreground
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                MaaSwitch(
-                    checked = state.runMode == RunMode.BACKGROUND,
-                    enabled = !state.configurationLocked,
-                    onCheckedChange = { background ->
-                        onIntent(
-                            SessionIntent.SetRunMode(
-                                if (background) RunMode.BACKGROUND else RunMode.FOREGROUND
-                            )
-                        )
-                    },
-                )
-            }
-        }
-    }
-    // 这两张卡只有前台用得上；后台模式在自己建的虚拟屏上跑，主屏尺寸与控制层都不相干
-    if (state.runMode == RunMode.FOREGROUND) {
-        ForegroundResolutionCard(onIntent)
-        OverlayModeCard(state, onIntent)
-    }
-}
-
-@Composable
-private fun ForegroundResolutionCard(onIntent: (SessionIntent) -> Unit) {
-    MaaCard(title = stringResource(R.string.foreground_resolution_title)) {
-        Text(
-            text = stringResource(R.string.foreground_resolution_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
-        ) {
-            MaaButton(
-                onClick = { onIntent(SessionIntent.ApplyForegroundResolution) },
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.foreground_resolution_apply), maxLines = 1)
-            }
-            MaaOutlinedButton(
-                onClick = { onIntent(SessionIntent.ResetForegroundResolution) },
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.foreground_resolution_reset), maxLines = 1)
-            }
-        }
-    }
-}
-
-@Composable
-private fun OverlayModeCard(state: SessionUiState, onIntent: (SessionIntent) -> Unit) {
-    MaaCard(title = stringResource(R.string.settings_overlay_mode)) {
-        MaaSingleChoiceFlow(
-            options = listOf(
-                OverlayControlMode.FLOAT_BALL to stringResource(R.string.settings_overlay_mode_ball),
-                OverlayControlMode.ACCESSIBILITY to stringResource(R.string.settings_overlay_mode_accessibility),
-            ),
-            selected = state.overlayControlMode,
-            enabled = !state.configurationLocked,
-            onSelect = { onIntent(SessionIntent.SetOverlayControlMode(it)) },
-        )
-        Text(
-            text = when (state.overlayControlMode) {
-                OverlayControlMode.FLOAT_BALL -> stringResource(R.string.settings_overlay_mode_hint_ball)
-                OverlayControlMode.ACCESSIBILITY ->
-                    stringResource(R.string.settings_overlay_mode_hint_accessibility)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        // 点了先过校验（后端 + 主屏比例），过了也只给一句「还没做好」
-        MaaOutlinedButton(
-            onClick = { onIntent(SessionIntent.ShowOverlay) },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.settings_overlay_show))
-        }
-    }
-}
-
-/**
- * 资源选择：MaaSingleChoiceFlow（描边胶囊，与悬浮窗/主题等单选项一致）
- */
+/** 仅存在多个资源/服务器候选时才显示 */
 @Composable
 private fun ResourceCard(state: SessionUiState, onIntent: (SessionIntent) -> Unit) {
     MaaCard(
@@ -575,19 +653,42 @@ private fun ResourceCard(state: SessionUiState, onIntent: (SessionIntent) -> Uni
     ) {
         val environment = state.environment
         val candidates = environment?.resourceCandidates.orEmpty()
-        if (candidates.isEmpty()) {
-            Text(
-                text = stringResource(R.string.settings_no_resources),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            MaaSingleChoiceFlow(
-                options = candidates.map { it.name to it.label },
-                selected = environment?.resource?.name ?: "",
-                enabled = !state.configurationLocked,
-                onSelect = { onIntent(SessionIntent.SelectResource(it)) },
-            )
-        }
+        MaaSingleChoiceFlow(
+            options = candidates.map { it.name to it.label },
+            selected = environment?.resource?.name ?: "",
+            enabled = !state.configurationLocked,
+            onSelect = { onIntent(SessionIntent.SelectResource(it)) },
+        )
+    }
+}
+
+@Composable
+private fun TerminalFooterPlate() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MaaDesignTokens.Spacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = "MINOS BUREAU OF CRISIS CONTROL",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                letterSpacing = 1.2.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+        )
+        Text(
+            text = "DISCARDS & SINNERS AUTOMATION PROTOCOL",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 9.sp,
+                letterSpacing = 0.8.sp,
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+        )
     }
 }

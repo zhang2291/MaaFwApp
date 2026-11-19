@@ -3,15 +3,21 @@ package com.aliothmoon.maafw.ui.components
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -87,17 +93,40 @@ fun MaaModalSheet(
                     .graphicsLayer { translationY = (1f - progress.value) * sheetHeightPx },
                 shape = RoundedCornerShape(topStart = topRadius, topEnd = topRadius),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(
+                    width = MaaDesignTokens.Separator.thickness,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
+                ),
             ) {
-                content(
-                    Modifier
-                        .fillMaxSize()
-                        // 另开的窗口，主窗口根部那层空白失焦的命中树够不到这里
-                        .clearFocusOnBlankTap()
-                        .padding(horizontal = MaaDesignTokens.Spacing.lg)
-                        .padding(top = MaaDesignTokens.Spacing.sm)
-                        .navigationBarsPadding()
-                        .imePadding(),
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 2.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f),
+                                    CircleShape,
+                                ),
+                        )
+                    }
+                    content(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            // 另开的窗口，主窗口根部那层空白失焦的命中树够不到这里
+                            .clearFocusOnBlankTap()
+                            .padding(horizontal = MaaDesignTokens.Spacing.lg)
+                            .padding(top = MaaDesignTokens.Spacing.xs)
+                            .navigationBarsPadding()
+                            .imePadding(),
+                    )
+                }
             }
         }
     }

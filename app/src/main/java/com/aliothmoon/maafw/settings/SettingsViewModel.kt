@@ -17,6 +17,7 @@ import com.aliothmoon.maafw.update.ResourceUpdateCheckResult
 import com.aliothmoon.maafw.update.ResourceUpdateInstallResult
 import com.aliothmoon.maafw.update.ResourceUpdateManifest
 import com.aliothmoon.maafw.update.ResourceUpdateService
+import com.aliothmoon.maafw.update.UpdateChannel
 import com.aliothmoon.maafw.update.UpdateCheckFailure
 import com.aliothmoon.maafw.update.UpdateCheckRequest
 import com.aliothmoon.maafw.update.UpdateCheckResult
@@ -200,9 +201,9 @@ class SettingsViewModel(
         updateOperation.update { it.copy(checking = true) }
         val result = updateService.check(
             UpdateCheckRequest(
-                source = appSettings.updateSource.value,
+                source = UpdateSource.GITHUB,
                 currentVersion = currentVersion,
-                channel = appSettings.updateChannel.value,
+                channel = UpdateChannel.STABLE,
                 abi = abi,
                 mirrorchyanRid = mirrorchyanRid(metadata),
                 githubRepository = appUpdateRepository(metadata),
@@ -234,9 +235,9 @@ class SettingsViewModel(
         // checker 内部已把非取消异常吞成 SourceFailed，这里不需要再兜一层
         val result = updateService.check(
             UpdateCheckRequest(
-                source = appSettings.updateSource.value,
+                source = UpdateSource.GITHUB,
                 currentVersion = currentVersion,
-                channel = appSettings.updateChannel.value,
+                channel = UpdateChannel.STABLE,
                 abi = abi,
                 mirrorchyanRid = mirrorchyanRid(metadata),
                 githubRepository = appUpdateRepository(metadata),
@@ -368,32 +369,18 @@ class SettingsViewModel(
         claimDownload() ?: return
         downloadJob = coroutineContext.job
 
-        val source = appSettings.updateSource.value
-        val cdk = appSettings.mirrorchyanCdk.value
-        // Mirror酱 无 CDK 必然解析失败；发请求前就地拦下，
-        // 免得用户对着一个网络错误猜原因（MirrorChyanUpdateClient.resolve 有同款类型化校验兜其它调用方）
-        if (source == UpdateSource.MIRRORCHYAN && cdk.isBlank()) {
-            updateOperation.update {
-                it.copy(
-                    downloading = false,
-                    updatePrompt = null,
-                    errorPrompt = UpdateErrorPrompt.download(UpdateCheckFailure.CDK_REQUIRED.message),
-                )
-            }
-            return
-        }
+        val source = UpdateSource.GITHUB
+        val cdk = ""
 
         updateOperation.update { it.copy(updatePrompt = null) }
 
         try {
             val metadata = projectMetadata()
 
-            // 按所选更新源现场解析下载端点，CDK 只在这一步带上；
-            // CDK 业务错误（7xxx）也只会在这里暴露，与检查错误同走弹窗
             val update = when (val resolved = updateService.resolve(
                 UpdateResolveRequest(
                     source = source,
-                    channel = appSettings.updateChannel.value,
+                    channel = UpdateChannel.STABLE,
                     abi = abi,
                     currentVersion = currentVersion,
                     mirrorchyanRid = mirrorchyanRid(metadata),

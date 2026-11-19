@@ -162,6 +162,8 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     )
                     if (keystorePath.isNotEmpty()) {
                         signingConfig = releaseSigning
+                    } else {
+                        signingConfig = android.signingConfigs.getByName("debug")
                     }
                 }
             }

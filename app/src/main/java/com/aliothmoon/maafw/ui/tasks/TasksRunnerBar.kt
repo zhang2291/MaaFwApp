@@ -20,8 +20,10 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Nightlight
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -69,26 +71,34 @@ internal fun RunnerToggleButton(
 ) {
     val phase = state.runner.phase
     Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.md),
+        modifier = modifier.padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(MaaDesignTokens.Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        val toggleModifier = Modifier.weight(1f)
+        val toggleModifier = Modifier
+            .weight(1f)
+            .height(44.dp)
         if (phase.isBusy) {
-            // 停止是破坏性动作，语义色取 error；对齐 HomeScreen 服务开关那套描边配比
             MaaSemanticOutlinedButton(
                 onClick = { onIntent(SessionIntent.Stop) },
                 semantic = MaterialTheme.colorScheme.error,
                 enabled = phase != RunnerPhase.Stopping,
                 modifier = toggleModifier,
             ) {
+                Icon(
+                    imageVector = Icons.Outlined.Stop,
+                    contentDescription = null,
+                    modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
+                )
+                Box(Modifier.size(MaaDesignTokens.Spacing.xs))
                 Text(
                     stringResource(
                         if (phase == RunnerPhase.Stopping) R.string.runner_stopping else R.string.runner_stop,
                     ),
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         } else {
-            // 前台模式灰显但仍可点：点了走 Start，由 SessionViewModel 拦下并给提示
             val foregroundBlocked = state.runMode == RunMode.FOREGROUND
             MaaButton(
                 onClick = { onIntent(SessionIntent.Start()) },
@@ -103,10 +113,18 @@ internal fun RunnerToggleButton(
                 },
                 modifier = toggleModifier,
             ) {
-                Text(stringResource(R.string.runner_start))
+                Icon(
+                    imageVector = Icons.Outlined.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(MaaDesignTokens.IconSize.sm),
+                )
+                Box(Modifier.size(MaaDesignTokens.Spacing.xs))
+                Text(
+                    stringResource(R.string.runner_start),
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
-        // 展开时描边与文字一起转 primary，让按钮自己表示面板的开合
         val accent = if (quickOptionsOpen) {
             MaterialTheme.colorScheme.primary
         } else {
@@ -115,11 +133,15 @@ internal fun RunnerToggleButton(
         MaaOutlinedButton(
             onClick = onToggleQuickOptions,
             contentPadding = PaddingValues(horizontal = MaaDesignTokens.Spacing.md),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = accent),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = accent,
+            ),
             border = BorderStroke(
-                MaaDesignTokens.Border.selected,
+                if (quickOptionsOpen) MaaDesignTokens.Border.selected else MaaDesignTokens.Separator.thickness,
                 if (quickOptionsOpen) accent else MaterialTheme.colorScheme.outline,
             ),
+            modifier = Modifier.height(44.dp),
         ) {
             Icon(
                 imageVector = Icons.Outlined.MoreVert,
