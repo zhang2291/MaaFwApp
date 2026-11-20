@@ -167,4 +167,25 @@ class GachaArchiveStoreTest {
         assertFalse(store.snapshot().categories.any { it.name == "锁定期间" })
         assertNotNull(store.addCategory("正常新增"))
     }
+
+    @Test fun dottedOcrTimestampIsValidAndNormalized() = temporary { root, store ->
+        val cells = listOf("2026-11-14.18:50:50", "慈·爱·愈", "玛奇朵")
+        val dottedRecord = GachaRecord(index = 11, key = GachaStore.key(cells), rarity = "普", type = "活动", cells = cells)
+        GachaStore.validate(dottedRecord)
+        assertEquals("2026-11-14 18:50:50", dottedRecord.time)
+        collected(root, "default-0", listOf(dottedRecord))
+        val snapshot = store.snapshot()
+        assertEquals(1, snapshot.records.size)
+        assertEquals("玛奇朵", snapshot.records.single().name)
+        assertEquals("2026-11-14 18:50:50", snapshot.records.single().time)
+    }
+
+    @Test fun snapshotIsResilientToDamagedLines() = temporary { root, store ->
+        val good = record("正常角色", index = 1)
+        val file = collected(root, "default-0", listOf(good))
+        file.appendText("bad non json line\n")
+        val snapshot = store.snapshot()
+        assertEquals(1, snapshot.records.size)
+        assertEquals("正常角色", snapshot.records.single().name)
+    }
 }

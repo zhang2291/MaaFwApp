@@ -56,7 +56,7 @@ fun GachaScreen(
     var rarity by rememberSaveable { mutableStateOf("全部") }
     var query by rememberSaveable { mutableStateOf("") }
     var details by rememberSaveable { mutableStateOf(false) }
-    var stopOnKnown by rememberSaveable { mutableStateOf(false) }
+    var stopOnKnown by rememberSaveable { mutableStateOf(true) }
     var more by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }

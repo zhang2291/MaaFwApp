@@ -148,7 +148,7 @@ private fun TasksContent(
     val canReorder = !state.configurationLocked && !showRunLog && activeTasks.size > 1
     val effectiveReorderMode = reorderMode && canReorder
     val isPreviewRunning = state.runner.phase.isBusy || state.gachaCollecting || state.inventoryCollecting
-    val showFullPreview = currentTab == "tasks" && (isPreviewRunning || previewManuallyExpanded)
+    val showFullPreview = isPreviewRunning || previewManuallyExpanded
 
     val pipActive = LocalIsInPip.current
     val context = LocalContext.current
@@ -246,34 +246,32 @@ private fun TasksContent(
                         }
                     }
 
-                    // 实时预览区：切「小工具」完全隐藏；任务页空闲默认折叠为紧凑状态胶囊，运行或手动点开才展开
-                    if (currentTab == "tasks") {
-                        if (showFullPreview) {
-                            LivePreview(
-                                resolution = state.previewResolution,
-                                surfaceReady = previewSurfaceReady,
-                                running = isPreviewRunning,
-                                watchdogState = state.watchdogState,
-                                content = previewContent.takeUnless { pipActive },
-                                onEnterFullscreen = onEnterFullscreen,
-                                onCollapse = if (!isPreviewRunning) {
-                                    { previewManuallyExpanded = false }
-                                } else {
-                                    null
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(176.dp),
-                                onBoundsChanged = { if (!pipActive) previewBounds = it },
-                            )
-                        } else {
-                            IdlePreviewCapsule(
-                                serviceStatus = state.serviceStatus,
-                                enabledTaskCount = enabledTaskCount,
-                                totalTaskCount = activeTasks.size,
-                                onExpand = { previewManuallyExpanded = true },
-                            )
-                        }
+                    // 实时预览区：运行或手动展开时显示 LivePreview，空闲时显示紧凑状态胶囊
+                    if (showFullPreview) {
+                        LivePreview(
+                            resolution = state.previewResolution,
+                            surfaceReady = previewSurfaceReady,
+                            running = isPreviewRunning,
+                            watchdogState = state.watchdogState,
+                            content = previewContent.takeUnless { pipActive },
+                            onEnterFullscreen = onEnterFullscreen,
+                            onCollapse = if (!isPreviewRunning) {
+                                { previewManuallyExpanded = false }
+                            } else {
+                                null
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(176.dp),
+                            onBoundsChanged = { if (!pipActive) previewBounds = it },
+                        )
+                    } else {
+                        IdlePreviewCapsule(
+                            serviceStatus = state.serviceStatus,
+                            enabledTaskCount = enabledTaskCount,
+                            totalTaskCount = activeTasks.size,
+                            onExpand = { previewManuallyExpanded = true },
+                        )
                     }
 
                     if (currentTab == "tools") {

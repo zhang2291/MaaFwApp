@@ -18,7 +18,7 @@ data class GachaRecord(
     val poolCategory: String? = null,
     val categoryId: String? = null,
 ) {
-    val time: String get() = cells.firstOrNull().orEmpty().replace(Regex("^(\\d{4}-\\d{2}-\\d{2})(\\d{2}:)"), "$1 $2")
+    val time: String get() = cells.firstOrNull().orEmpty().replace(Regex("""^(\d{4}-\d{2}-\d{2})[.\s_T]?(\d{2}:)"""), "$1 $2")
     val pool: String get() = cells.getOrNull(1).orEmpty()
     val name: String get() = cells.lastOrNull().orEmpty()
     val category: String get() = type?.takeIf(String::isNotBlank) ?: "未判"
@@ -76,7 +76,7 @@ class GachaStore(private val dataRoot: File) {
 
         fun validate(record: GachaRecord) {
             require(record.cells.size >= 3 && record.cells.all { it.length <= 2000 }) { "记录必须包含时间、卡池和角色" }
-            require(record.cells.first().matches(Regex("\\d{4}-\\d{2}-\\d{2}\\s?\\d{2}:\\d{2}:\\d{2}"))) { "记录时间格式不正确" }
+            require(record.cells.first().matches(Regex("""\d{4}-\d{2}-\d{2}[.\s_T]?\d{2}:\d{2}:\d{2}"""))) { "记录时间格式不正确" }
             require(record.pool.isNotBlank() && record.name.isNotBlank()) { "卡池或角色为空" }
             require(record.key == key(record.cells)) { "记录身份字段与明细不一致" }
             require(record.category.length <= 100) { "追踪类型过长" }

@@ -67,7 +67,7 @@ class GachaArchiveStore(dataRoot: File) {
         return categories
     }
 
-    private fun readArchive(category: GachaCategory): List<GachaRecord> {
+    private fun readArchive(category: GachaCategory, strict: Boolean = true): List<GachaRecord> {
         val directory = archive(category.id)
         require(!directory.exists() || directory.isDirectory) { "档案目录格式无效" }
         return directory.listFiles().orEmpty().filter { it.extension == "jsonl" }.sortedBy { it.name }.flatMap { file ->
@@ -78,7 +78,10 @@ class GachaArchiveStore(dataRoot: File) {
                 if (content.isBlank()) null else runCatching {
                     json.decodeFromString<GachaRecord>(content).also { GachaStore.validate(it) }
                         .copy(poolCategory = category.name, categoryId = category.id)
-                }.getOrElse { error("档案 ${file.name} 第 ${index + 1} 行损坏，未修改原文件") }
+                }.getOrElse {
+                    if (strict) error("档案 ${file.name} 第 ${index + 1} 行损坏，未修改原文件")
+                    else null
+                }
             }
         }
     }
@@ -86,7 +89,7 @@ class GachaArchiveStore(dataRoot: File) {
     fun snapshot(): GachaArchiveSnapshot = locked {
         val categories = catalogUnlocked()
         val visible = categories + if (hiddenLegacy.exists()) emptyList() else listOf(LEGACY_CATEGORY)
-        val records = visible.flatMap(::readArchive)
+        val records = visible.flatMap { readArchive(it, strict = false) }
         if (!catalog.exists()) transaction(mapOf(catalog to catalogBytes(categories)))
         GachaArchiveSnapshot(visible, records)
     }
