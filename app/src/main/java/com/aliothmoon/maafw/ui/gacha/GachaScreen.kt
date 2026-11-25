@@ -233,6 +233,7 @@ fun GachaScreen(
         if (collecting) {
             wasCollecting = true
             if (collectStartMs == 0L) collectStartMs = System.currentTimeMillis()
+            withContext(Dispatchers.IO) { GachaProgress.clear(dataRoot, collectStartMs) }
             while (true) {
                 liveProgress = withContext(Dispatchers.IO) { GachaProgress.read(dataRoot, collectStartMs) }
                 delay(800)
@@ -1044,7 +1045,9 @@ fun GachaScreen(
                             MaaButton(
                                 onClick = {
                                     if (!currentRunning && category != null) {
-                                        collectStartMs = System.currentTimeMillis()
+                                        val startedAt = System.currentTimeMillis()
+                                        collectStartMs = startedAt
+                                        GachaProgress.clear(dataRoot, startedAt)
                                         liveProgress = null
                                         message = ""
                                         messageIsError = false

@@ -37,12 +37,21 @@ data class GachaProgress(
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
 
-        /** Returns progress only if it was written after [sinceMillis]; stale files from older runs are ignored. */
+        /** Returns progress only if it was written at or after [sinceMillis]; stale files from older runs are ignored. */
         fun read(dataRoot: File, sinceMillis: Long): GachaProgress? = runCatching {
             val file = File(dataRoot, "record/gacha/.progress.json")
             if (!file.isFile) return null
             json.decodeFromString<GachaProgress>(file.readText(Charsets.UTF_8))
-                .takeIf { it.updated * 1000 >= sinceMillis - 2_000 }
+                .takeIf { it.updated * 1000 >= sinceMillis }
         }.getOrNull()
+
+        /** Delete any stale .progress.json written before [beforeMillis] (or unconditionally when null). */
+        fun clear(dataRoot: File, beforeMillis: Long? = null) {
+            runCatching {
+                val file = File(dataRoot, "record/gacha/.progress.json")
+                if (!file.isFile) return
+                if (beforeMillis == null || read(dataRoot, beforeMillis) == null) file.delete()
+            }
+        }
     }
 }

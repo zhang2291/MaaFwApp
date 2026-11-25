@@ -271,4 +271,24 @@ class GachaArchiveStoreTest {
         val stopped = GachaProgress(state = "running", status = "running", new = 5, pages = 3).completionSummary()
         assertEquals("采集已提前停止：已保留新增 5 条（共扫 3 页）" to false, stopped)
     }
+
+    @Test fun progressReadRejectsPreviousRunAndClearDeletesFile() = temporary { root, _ ->
+        val progressFile = File(root, "record/gacha/.progress.json").apply { parentFile!!.mkdirs() }
+        val startedAtMs = 1_795_600_000_000L
+        progressFile.writeText(
+            """{"category":"default-0","state":"done","pages":1,"new":1,"status":"completed","updated":${(startedAtMs - 1_000L) / 1000.0}}""",
+            Charsets.UTF_8,
+        )
+        assertNull(GachaProgress.read(root, startedAtMs))
+        GachaProgress.clear(root, startedAtMs)
+        assertFalse(progressFile.exists())
+
+        progressFile.writeText(
+            """{"category":"default-0","state":"done","pages":2,"new":3,"status":"completed","updated":${(startedAtMs + 500L) / 1000.0}}""",
+            Charsets.UTF_8,
+        )
+        assertEquals(3, GachaProgress.read(root, startedAtMs)?.new)
+        GachaProgress.clear(root)
+        assertFalse(progressFile.exists())
+    }
 }
