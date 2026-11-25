@@ -90,4 +90,34 @@ class InventoryStoreTest {
         assertEquals(capture.canonicalFile, items.first().image)
         assertNull(items.last().image)
     }
+
+    @Test fun `history supports custom rename clear and safe delete`() {
+        val snap = """{"version":1,"captured_at":"2026-11-06T14:22:11+08:00","status":"partial","currencies":{},"categories":{"道具":{"status":"partial","reason":"","items":{}}}}"""
+        write("data/inventory/latest.json", snap)
+        write("data/inventory/history/20261106-142211-364634.json", snap)
+        write("data/inventory/history/20261030-185016-567628.json", snap)
+
+        val s = store()
+        assertEquals("抽席宁前存货", s.renameHistory("20261106-142211-364634.json", "  抽席宁前存货  "))
+        val entries = s.history()
+        assertEquals("抽席宁前存货", entries.first { it.fileName == "20261106-142211-364634.json" }.label)
+        assertEquals("", entries.first { it.fileName == "20261030-185016-567628.json" }.label)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            s.renameHistory("20261106-142211-364634.json", "a".repeat(41))
+        }
+        assertThrows(IllegalStateException::class.java) {
+            s.renameHistory("../latest.json", "越界")
+        }
+
+        assertEquals("", s.renameHistory("20261106-142211-364634.json", "   "))
+        assertEquals("", s.history().first { it.fileName == "20261106-142211-364634.json" }.label)
+
+        s.renameHistory("20261106-142211-364634.json", "待删快照")
+        s.deleteHistory("20261106-142211-364634.json")
+        assertEquals(listOf("20261030-185016-567628.json"), s.history().map { it.fileName })
+        assertNotNull(s.load())
+        assertThrows(IllegalStateException::class.java) { s.deleteHistory("../latest.json") }
+        assertThrows(IllegalStateException::class.java) { s.deleteHistory("missing.json") }
+    }
 }

@@ -18,7 +18,12 @@ data class GachaCategory(val id: String, val name: String)
 
 data class GachaBundle(val categories: List<String>, val records: List<GachaRecord>)
 
-data class GachaArchiveSnapshot(val categories: List<GachaCategory>, val records: List<GachaRecord>)
+data class GachaArchiveSnapshot(
+    val categories: List<GachaCategory>,
+    val records: List<GachaRecord>,
+    /** Lines that failed to parse/validate in tolerant mode: "类型/文件 第 N 行：原因". Never silently hidden. */
+    val skipped: List<String> = emptyList(),
+)
 
 /** Desktop-compatible category catalog; all mutations coordinate with the collector's POSIX lock. */
 class GachaArchiveStore(dataRoot: File) {
@@ -38,14 +43,26 @@ class GachaArchiveStore(dataRoot: File) {
     /** Reject linked parents too: checking only the leaf does not protect a linked record directory. */
     private fun checked(file: File): File {
         val path = file.toPath().toAbsolutePath().normalize()
-        val base = root.toPath()
+        val base = root.toPath().toAbsolutePath().normalize()
         require(path.startsWith(base) && path != base) { "档案路径超出数据目录" }
         var current = root
         base.relativize(path).forEach { part ->
             current = File(current, part.toString())
             require(!Files.isSymbolicLink(current.toPath())) { "档案路径含符号链接，拒绝操作" }
         }
-        require(file.canonicalFile.toPath().startsWith(base)) { "档案路径超出数据目录" }
+        val canonical = file.canonicalFile.toPath().toAbsolutePath().normalize()
+        val freshBase = root.canonicalFile.toPath().toAbsolutePath().normalize()
+        val sameUnderlying = runCatching {
+            var existing: java.nio.file.Path? = path
+            while (existing != null && !Files.exists(existing) && existing != base) {
+                existing = existing.parent
+            }
+            existing != null && Files.exists(existing) &&
+                Files.isSameFile(existing.toFile().canonicalFile.toPath(), existing)
+        }.getOrDefault(false)
+        require(canonical.startsWith(base) || canonical.startsWith(freshBase) || sameUnderlying) {
+            "档案路径超出数据目录"
+        }
         return path.toFile()
     }
 
@@ -67,7 +84,7 @@ class GachaArchiveStore(dataRoot: File) {
         return categories
     }
 
-    private fun readArchive(category: GachaCategory, strict: Boolean = true): List<GachaRecord> {
+    private fun readArchive(category: GachaCategory, strict: Boolean = true, skipped: MutableList<String>? = null): List<GachaRecord> {
         val directory = archive(category.id)
         require(!directory.exists() || directory.isDirectory) { "档案目录格式无效" }
         return directory.listFiles().orEmpty().filter { it.extension == "jsonl" }.sortedBy { it.name }.flatMap { file ->
@@ -78,9 +95,10 @@ class GachaArchiveStore(dataRoot: File) {
                 if (content.isBlank()) null else runCatching {
                     json.decodeFromString<GachaRecord>(content).also { GachaStore.validate(it) }
                         .copy(poolCategory = category.name, categoryId = category.id)
-                }.getOrElse {
+                }.getOrElse { e ->
                     if (strict) error("档案 ${file.name} 第 ${index + 1} 行损坏，未修改原文件")
-                    else null
+                    skipped?.add("${category.name}/${file.name} 第 ${index + 1} 行：${e.message ?: "格式无效"}")
+                    null
                 }
             }
         }
@@ -89,9 +107,10 @@ class GachaArchiveStore(dataRoot: File) {
     fun snapshot(): GachaArchiveSnapshot = locked {
         val categories = catalogUnlocked()
         val visible = categories + if (hiddenLegacy.exists()) emptyList() else listOf(LEGACY_CATEGORY)
-        val records = visible.flatMap { readArchive(it, strict = false) }
+        val skipped = mutableListOf<String>()
+        val records = visible.flatMap { readArchive(it, strict = false, skipped = skipped) }
         if (!catalog.exists()) transaction(mapOf(catalog to catalogBytes(categories)))
-        GachaArchiveSnapshot(visible, records)
+        GachaArchiveSnapshot(visible, records, skipped)
     }
 
     fun bundle(): GachaBundle = snapshot().let { GachaBundle(it.categories.map(GachaCategory::name), it.records) }

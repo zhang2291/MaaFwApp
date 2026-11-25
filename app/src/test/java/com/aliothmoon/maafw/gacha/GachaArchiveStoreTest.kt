@@ -188,4 +188,15 @@ class GachaArchiveStoreTest {
         assertEquals(1, snapshot.records.size)
         assertEquals("正常角色", snapshot.records.single().name)
     }
+
+    @Test fun snapshotReadsSparseCategoriesWithUnicodeFilenamesAndRejectsTraversal() = temporary { root, store ->
+        collected(root, "default-0", listOf(record("角色A", index = 1)), "活动.jsonl")
+        collected(root, "default-4", listOf(record("角色B", category = "复刻", index = 1)), "常规.jsonl")
+        val snapshot = store.snapshot()
+        assertEquals(2, snapshot.records.size)
+        assertEquals(setOf("角色A", "角色B"), snapshot.records.map { it.name }.toSet())
+        val catalog = File(root, "gacha-categories.json")
+        catalog.writeText("[{\"id\":\"../outside\",\"name\":\"越界\"}]")
+        assertThrows(IllegalArgumentException::class.java) { store.snapshot() }
+    }
 }

@@ -221,6 +221,7 @@ fun AppRoot(
 
     // 预览面的所有权在这一层：全屏宿主必须在 Scaffold 之外才能盖住底部 tab 栏，
     // 而 movableContent 要求内嵌与全屏两处调用点同属一棵组合树
+    var toolNavRequest by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var previewFullscreen by rememberSaveable { mutableStateOf(false) }
     var previewSurfaceReady by remember { mutableStateOf(false) }
     val previewContent = state.previewResolution?.let { resolution ->
@@ -520,6 +521,7 @@ fun AppRoot(
         ) { padding ->
             HorizontalPager(
                 state = pagerState,
+                userScrollEnabled = false,
                 // 不预组合的话，整页的首次组合与测量全落在切页动画的第一帧里：
                 // 实测任务页那一帧 193ms（7 个 TaskRow 逐个组合 45ms + measureAndLayout 31ms）
                 beyondViewportPageCount = 1,
@@ -541,6 +543,10 @@ fun AppRoot(
                         onNavigateToTasks = {
                             scope.launch { pagerState.animateScrollToPage(TopDestination.Tasks.ordinal) }
                         },
+                        onOpenTool = { tool ->
+                            toolNavRequest = ((toolNavRequest?.first ?: 0) + 1) to tool
+                            scope.launch { pagerState.animateScrollToPage(TopDestination.Tasks.ordinal) }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                     TopDestination.Tasks -> TasksScreen(
@@ -555,6 +561,7 @@ fun AppRoot(
                         onEnterFullscreen = { previewFullscreen = true },
                         onExportLogs = { exportSheetVisible = true },
                         onIntent = viewModel::onIntent,
+                        toolNavRequest = toolNavRequest,
                         modifier = Modifier.fillMaxSize(),
                     )
                     TopDestination.Schedule -> ScheduleScreen(

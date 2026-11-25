@@ -47,7 +47,7 @@ class MaaFwApp : Application() {
         CrashHandler().install()
         val app = this
         val koin = startKoin {
-            androidLogger(if (BuildConfig.DEBUG) Level.DEBUG else Level.NONE)
+            androidLogger(Level.ERROR)
             androidContext(app)
             modules(
                 coreModule,

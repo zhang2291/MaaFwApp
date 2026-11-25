@@ -3,8 +3,10 @@ package com.aliothmoon.maafw.ui.home
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -14,10 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,11 +54,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aliothmoon.maafw.R
+import com.aliothmoon.maafw.constant.AppFiles
+import com.aliothmoon.maafw.constant.AppPaths
 import com.aliothmoon.maafw.domain.DiagnosticSeverity
+import com.aliothmoon.maafw.gacha.GachaArchiveStore
 import com.aliothmoon.maafw.i18n.asString
+import com.aliothmoon.maafw.inventory.InventoryStore
 import com.aliothmoon.maafw.privileged.PrivilegedServiceState
 import com.aliothmoon.maafw.privileged.SystemPermission
 import com.aliothmoon.maafw.project.ProjectState
@@ -66,6 +76,7 @@ import com.aliothmoon.maafw.settings.ResourceUpdatePanelState
 import com.aliothmoon.maafw.settings.SettingsIntent
 import com.aliothmoon.maafw.settings.UpdatePanelState
 import com.aliothmoon.maafw.theme.MaaDesignTokens
+import com.aliothmoon.maafw.theme.MaaIcons
 import com.aliothmoon.maafw.theme.MaaTheme
 import com.aliothmoon.maafw.ui.components.MaaButton
 import com.aliothmoon.maafw.ui.components.MaaCard
@@ -78,7 +89,13 @@ import com.aliothmoon.maafw.ui.components.MaaSemanticOutlinedButton
 import com.aliothmoon.maafw.ui.components.MaaSingleChoiceFlow
 import com.aliothmoon.maafw.ui.components.maaCardBorder
 import com.aliothmoon.maafw.ui.components.maaClickable
+import com.aliothmoon.maafw.ui.gacha.GachaStatistics
 import com.aliothmoon.maafw.ui.i18n.diagnosticsSummaryUiText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.Locale
 
 /**
  * 精密极简工业首页：
@@ -99,6 +116,7 @@ fun HomeScreen(
     resourceUpdate: ResourceUpdatePanelState,
     onSettingsIntent: (SettingsIntent) -> Unit,
     onNavigateToTasks: () -> Unit = {},
+    onOpenTool: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -134,6 +152,7 @@ fun HomeScreen(
                 onIntent = onIntent,
                 onNavigateToTasks = onNavigateToTasks,
             )
+            ToolsOverviewCard(refreshKey = state.runner.phase.isBusy, onOpenTool = onOpenTool)
             PermissionsCard(state, onIntent)
             if ((state.environment?.resourceCandidates?.size ?: 0) > 1) {
                 ResourceCard(state, onIntent)
@@ -690,5 +709,243 @@ private fun TerminalFooterPlate() {
             ),
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
         )
+    }
+}
+
+private data class HomePityTile(val name: String, val pity: Int, val total: Int)
+
+private data class HomeToolsSummary(
+    val pities: List<HomePityTile>,
+    val crystals: Long?,
+    val dis: Long?,
+    val essence: Long?,
+    val capturedAt: String?,
+)
+
+@Composable
+private fun ToolsOverviewCard(refreshKey: Any, onOpenTool: (String) -> Unit) {
+    val summary by produceState<HomeToolsSummary?>(null, refreshKey) {
+        value = withContext(Dispatchers.IO) {
+            if (value == null) delay(150)
+            val dataRoot = File(AppPaths.ROOT, "data")
+            val gachaSnap = runCatching { GachaArchiveStore(dataRoot).snapshot() }
+                .onFailure { android.util.Log.w("HomeScreen", "Failed to load gacha overview", it) }
+                .getOrNull()
+            val byCat = gachaSnap?.records.orEmpty().groupBy { it.categoryId ?: "legacy" }
+            val pities = gachaSnap?.categories.orEmpty().mapNotNull { c ->
+                val recs = byCat[c.id].orEmpty()
+                if (recs.isEmpty()) null else HomePityTile(c.name, GachaStatistics.pity(recs), recs.size)
+            }.take(3)
+            val inv = runCatching {
+                InventoryStore(dataRoot, File(AppPaths.ROOT, AppFiles.PI_DIR)).loadCurrencySummary()
+            }.onFailure { android.util.Log.w("HomeScreen", "Failed to load inventory overview", it) }
+                .getOrNull()
+            HomeToolsSummary(
+                pities = pities,
+                crystals = inv?.crystals,
+                dis = inv?.dis,
+                essence = inv?.essence,
+                capturedAt = inv?.capturedAt,
+            )
+        }
+    }
+    val data = summary ?: return
+    if (data.pities.isEmpty() && data.crystals == null && data.dis == null) return
+
+    MaaCard(title = "档案与仓库速览") {
+        if (data.pities.isNotEmpty()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onOpenTool("gacha") },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = maaCardBorder(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "各池当前垫抽",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                "抽卡记录",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Icon(
+                                MaaIcons.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        data.pities.forEach { tile ->
+                            val isSoft = tile.pity >= GachaStatistics.SOFT_PITY
+                            val barColor = if (isSoft) MaterialTheme.colorScheme.error else MaaTheme.palette.warning.content
+                            val frac = (tile.pity.toFloat() / GachaStatistics.HARD_PITY).coerceIn(0f, 1f)
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = maaCardBorder(),
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        tile.name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        "${tile.pity} / ${GachaStatistics.HARD_PITY}",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
+                                        fontWeight = FontWeight.Bold,
+                                        color = barColor,
+                                        maxLines = 1,
+                                    )
+                                    BoxWithConstraints(
+                                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                                        contentAlignment = Alignment.CenterStart,
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(4.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(frac)
+                                                    .height(4.dp)
+                                                    .clip(CircleShape)
+                                                    .background(barColor),
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .offset(x = maxWidth * (GachaStatistics.SOFT_PITY.toFloat() / GachaStatistics.HARD_PITY) - 1.dp)
+                                                .width(1.5.dp)
+                                                .height(6.dp)
+                                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)),
+                                        )
+                                    }
+                                    Text(
+                                        "${tile.total} 抽",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontFeatureSettings = "tnum"),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (data.crystals != null || data.dis != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onOpenTool("inventory") },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = maaCardBorder(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "仓库与养成速览",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                "仓库识别",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Icon(
+                                MaaIcons.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("异方晶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val txt = data.crystals?.let { String.format(Locale.ROOT, "%,d (≈ %d 抽)", it, it / 180) } ?: "未识别"
+                            Text(
+                                txt,
+                                style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
+                                fontWeight = FontWeight.Bold,
+                                color = MaaTheme.palette.warning.content,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("狄斯币", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val txt = data.dis?.let { String.format(Locale.ROOT, "%,d", it) } ?: "未识别"
+                            Text(
+                                txt,
+                                style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    val dis = data.dis
+                    if (dis != null && dis > 0L) {
+                        val lv90 = String.format(Locale.ROOT, "通用估算：狄斯币约够 %.1f 名狂级升至 90 级", dis / 2_000_000.0)
+                        Text(
+                            lv90,
+                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                            color = MaaTheme.palette.info.content,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

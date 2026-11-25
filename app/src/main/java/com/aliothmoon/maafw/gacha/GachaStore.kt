@@ -20,9 +20,28 @@ data class GachaRecord(
 ) {
     val time: String get() = cells.firstOrNull().orEmpty().replace(Regex("""^(\d{4}-\d{2}-\d{2})[.\s_T]?(\d{2}:)"""), "$1 $2")
     val pool: String get() = cells.getOrNull(1).orEmpty()
-    val name: String get() = cells.lastOrNull().orEmpty()
+    val name: String get() {
+        val raw = cells.lastOrNull().orEmpty().trim().removePrefix("·").removeSuffix("·")
+        return when (raw) {
+            "县" -> "昙"
+            "卡茲安" -> "卡兹安"
+            "克斯蒂娜" -> "克里斯蒂娜"
+            "雷比妮斯" -> "雷比尼斯"
+            "澈澈", "澈县" -> "澈"
+            "諾克斯", "诺克断" -> "诺克斯"
+            else -> raw
+        }
+    }
     val category: String get() = type?.takeIf(String::isNotBlank) ?: "未判"
-    val identity: String get() = category + "\u0000" + key
+    val canonicalKey: String get() {
+        if (cells.size >= 3) {
+            val tsDigits = Regex("""\d+""").findAll(cells[0]).map { it.value }.take(6).joinToString("")
+            val p = cells[1].replace(Regex("""\s+"""), "")
+            return "$tsDigits$p$name"
+        }
+        return key
+    }
+    val identity: String get() = category + "\u0000" + canonicalKey
 }
 
 /** Independent of the replaceable PI directory. JSONL remains compatible with the upstream collector. */
@@ -78,7 +97,8 @@ class GachaStore(private val dataRoot: File) {
             require(record.cells.size >= 3 && record.cells.all { it.length <= 2000 }) { "记录必须包含时间、卡池和角色" }
             require(record.cells.first().matches(Regex("""\d{4}-\d{2}-\d{2}[.\s_T]?\d{2}:\d{2}:\d{2}"""))) { "记录时间格式不正确" }
             require(record.pool.isNotBlank() && record.name.isNotBlank()) { "卡池或角色为空" }
-            require(record.key == key(record.cells)) { "记录身份字段与明细不一致" }
+            val literal = key(record.cells)
+            require(record.key.isBlank() || record.key == literal || record.key == record.canonicalKey) { "记录身份字段与明细不一致" }
             require(record.category.length <= 100) { "追踪类型过长" }
         }
 

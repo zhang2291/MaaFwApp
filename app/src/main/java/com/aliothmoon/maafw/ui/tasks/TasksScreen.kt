@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +79,7 @@ fun TasksScreen(
     onEnterFullscreen: () -> Unit,
     onExportLogs: () -> Unit,
     onIntent: (SessionIntent) -> Unit,
+    toolNavRequest: Pair<Int, String>? = null,
     modifier: Modifier = Modifier,
 ) {
     Crossfade(
@@ -118,6 +120,7 @@ fun TasksScreen(
                 onEnterFullscreen = onEnterFullscreen,
                 onExportLogs = onExportLogs,
                 onIntent = onIntent,
+                toolNavRequest = toolNavRequest,
             )
         }
     }
@@ -134,11 +137,21 @@ private fun TasksContent(
     onEnterFullscreen: () -> Unit,
     onExportLogs: () -> Unit,
     onIntent: (SessionIntent) -> Unit,
+    toolNavRequest: Pair<Int, String>? = null,
     modifier: Modifier = Modifier,
 ) {
     var showQuickOptions by rememberSaveable { mutableStateOf(false) }
     var currentTab by rememberSaveable { mutableStateOf("tasks") } // "tasks" or "tools"
     var selectedTool by rememberSaveable { mutableStateOf("inventory") } // "inventory" or "gacha"
+    var handledToolToken by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(toolNavRequest) {
+        val req = toolNavRequest
+        if (req != null && req.first > handledToolToken) {
+            handledToolToken = req.first
+            currentTab = "tools"
+            selectedTool = req.second
+        }
+    }
     var previewManuallyExpanded by rememberSaveable { mutableStateOf(false) }
     var showRunLog by rememberSaveable { mutableStateOf(false) }
     var reorderMode by rememberSaveable { mutableStateOf(false) }

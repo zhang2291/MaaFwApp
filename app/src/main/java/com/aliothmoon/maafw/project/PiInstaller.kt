@@ -144,6 +144,8 @@ class PiInstaller(
 
     private fun unpackZip(dest: File, zip: ZipInputStream, onProgress: PiUnpackProgress) {
         val destCanon = dest.canonicalFile
+        val destPath = dest.toPath().normalize()
+        val createdDirs = HashSet<File>(64)
         val buffer = ByteArray(COPY_BUFFER_BYTES)
         var done = 0
         while (true) {
@@ -154,11 +156,18 @@ class PiInstaller(
             }
             val name = normalizeZipName(zipEntry.name)
             val outFile = File(dest, name)
-            val outCanon = outFile.canonicalFile
-            if (outCanon != destCanon && !outCanon.path.startsWith(destCanon.path + File.separator)) {
+            val outPath = outFile.toPath().normalize()
+            if (!outPath.startsWith(destPath)) {
                 throw PiUnpackException("illegal PI archive entry: $name")
             }
-            outFile.parentFile?.mkdirs()
+            val parent = outFile.parentFile
+            if (parent != null && createdDirs.add(parent)) {
+                parent.mkdirs()
+                val parentCanon = parent.canonicalFile
+                if (parentCanon != destCanon && !parentCanon.path.startsWith(destCanon.path + File.separator)) {
+                    throw PiUnpackException("illegal PI archive entry: $name")
+                }
+            }
             outFile.outputStream().use { output -> zip.copyTo(output, buffer) }
             zip.closeEntry()
             done++
