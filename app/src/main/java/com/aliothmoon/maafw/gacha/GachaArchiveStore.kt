@@ -12,6 +12,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantLock
 
 @Serializable
 data class GachaCategory(val id: String, val name: String)
@@ -32,13 +34,28 @@ class GachaArchiveStore(dataRoot: File) {
     private val catalog get() = checked(File(root, "gacha-categories.json"))
     private val hiddenLegacy get() = checked(File(root, ".gacha-legacy-hidden"))
 
-    private fun <T> locked(block: () -> T): T {
+    private fun <T> locked(waitMs: Long = 0L, block: () -> T): T {
         check(root.isDirectory || root.mkdirs()) { "无法创建抽卡数据目录" }
-        return RandomAccessFile(checked(File(root, ".gacha.lock")), "rw").use { file ->
-            val lock = try { file.channel.tryLock() } catch (_: OverlappingFileLockException) { null }
-            checkNotNull(lock) { "正在保存采集记录，请稍后重试" }.use { block() }
+        val lockFile = checked(File(root, ".gacha.lock"))
+        val jvmLock = inProcessLocks.computeIfAbsent(lockFile.path) { ReentrantLock() }
+        jvmLock.lock()
+        try {
+            return RandomAccessFile(lockFile, "rw").use { file ->
+                val deadline = System.nanoTime() + waitMs * 1_000_000L
+                var lock = tryLockOrNull(file)
+                while (lock == null && waitMs > 0L && System.nanoTime() < deadline) {
+                    Thread.sleep(40L)
+                    lock = tryLockOrNull(file)
+                }
+                checkNotNull(lock) { "正在保存采集记录，请稍后重试" }.use { block() }
+            }
+        } finally {
+            jvmLock.unlock()
         }
     }
+
+    private fun tryLockOrNull(file: RandomAccessFile) =
+        try { file.channel.tryLock() } catch (_: OverlappingFileLockException) { null }
 
     /** Reject linked parents too: checking only the leaf does not protect a linked record directory. */
     private fun checked(file: File): File {
@@ -104,7 +121,7 @@ class GachaArchiveStore(dataRoot: File) {
         }
     }
 
-    fun snapshot(): GachaArchiveSnapshot = locked {
+    fun snapshot(): GachaArchiveSnapshot = locked(waitMs = 800L) {
         val categories = catalogUnlocked()
         val visible = categories + if (hiddenLegacy.exists()) emptyList() else listOf(LEGACY_CATEGORY)
         val skipped = mutableListOf<String>()
@@ -267,6 +284,7 @@ class GachaArchiveStore(dataRoot: File) {
     }
 
     companion object {
+        private val inProcessLocks = ConcurrentHashMap<String, ReentrantLock>()
         const val LEGACY_ID = "legacy"
         const val LEGACY_NAME = "未分类（旧记录）"
         private const val MAX_CATEGORIES = 200

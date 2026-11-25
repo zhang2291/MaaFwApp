@@ -9,6 +9,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.file.Files
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class GachaArchiveStoreTest {
     private fun record(name: String = "角色", category: String? = "新角色", index: Int = 0, type: String = "活动"): GachaRecord {
@@ -198,5 +201,30 @@ class GachaArchiveStoreTest {
         val catalog = File(root, "gacha-categories.json")
         catalog.writeText("[{\"id\":\"../outside\",\"name\":\"越界\"}]")
         assertThrows(IllegalArgumentException::class.java) { store.snapshot() }
+    }
+
+    @Test fun concurrentSnapshotsInSameJvmDoNotCollide() = temporary { root, store ->
+        collected(root, "default-0", listOf(record("角色A", index = 1), record("角色B", index = 2)), "活动.jsonl")
+        val workers = 4
+        val start = CountDownLatch(1)
+        val done = CountDownLatch(workers)
+        val errors = Collections.synchronizedList(mutableListOf<Throwable>())
+        val counts = Collections.synchronizedList(mutableListOf<Int>())
+        repeat(workers) {
+            Thread {
+                try {
+                    start.await()
+                    counts += store.snapshot().records.size
+                } catch (t: Throwable) {
+                    errors += t
+                } finally {
+                    done.countDown()
+                }
+            }.start()
+        }
+        start.countDown()
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+        assertTrue("Unexpected errors: $errors", errors.isEmpty())
+        assertEquals(List(workers) { 2 }, counts)
     }
 }
