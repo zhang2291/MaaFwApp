@@ -20,6 +20,20 @@ data class GachaProgress(
 ) {
     val secondsPerPage: Double? get() = if (pages > 0) elapsed / pages else null
 
+    fun completionSummary(): Pair<String, Boolean> {
+        val reasonSuffix = reason.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty()
+        return when {
+            state == "done" && status == "completed" ->
+                "采集完成：本次新增 $new 条（共扫 $pages 页）" to false
+            status == "partial" ->
+                "采集未完整结束$reasonSuffix：已保留新增 $new 条（共扫 $pages 页）" to true
+            state == "running" || state == "finishing" ->
+                "采集已提前停止：已保留新增 $new 条（共扫 $pages 页）" to false
+            else ->
+                "采集已结束$reasonSuffix：本次新增 $new 条（共扫 $pages 页）" to (status != "completed")
+        }
+    }
+
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
 

@@ -243,10 +243,16 @@ fun GachaScreen(
                 val finalProgress = withContext(Dispatchers.IO) { GachaProgress.read(dataRoot, collectStartMs) }
                 liveProgress = null
                 collectStartMs = 0L
-                refresh()
-                if (finalProgress != null) {
-                    messageIsError = false
-                    message = "采集完成：本次新增 ${finalProgress.new} 条（共扫 ${finalProgress.pages} 页）"
+                action {
+                    loadRecords()
+                    if (finalProgress != null) {
+                        val (summary, isWarning) = finalProgress.completionSummary()
+                        message = summary
+                        messageIsError = isWarning
+                    } else {
+                        message = ""
+                        messageIsError = false
+                    }
                 }
             } else {
                 refresh()

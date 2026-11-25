@@ -254,4 +254,21 @@ class GachaArchiveStoreTest {
         val mismatchedRecord = legacyRecord.copy(key = "20261125170201其他池玛奇朵")
         assertThrows(IllegalArgumentException::class.java) { GachaStore.validate(mismatchedRecord) }
     }
+
+    @Test fun progressCompletionSummaryDistinguishesCompletedPartialAndStopped() {
+        val completed = GachaProgress(state = "done", status = "completed", new = 3, pages = 2).completionSummary()
+        assertEquals("采集完成：本次新增 3 条（共扫 2 页）" to false, completed)
+
+        val partial = GachaProgress(
+            state = "done",
+            status = "partial",
+            reason = "脱离抽卡记录页",
+            new = 1,
+            pages = 1,
+        ).completionSummary()
+        assertEquals("采集未完整结束（脱离抽卡记录页）：已保留新增 1 条（共扫 1 页）" to true, partial)
+
+        val stopped = GachaProgress(state = "running", status = "running", new = 5, pages = 3).completionSummary()
+        assertEquals("采集已提前停止：已保留新增 5 条（共扫 3 页）" to false, stopped)
+    }
 }
