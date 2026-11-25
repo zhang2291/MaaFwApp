@@ -227,4 +227,31 @@ class GachaArchiveStoreTest {
         assertTrue("Unexpected errors: $errors", errors.isEmpty())
         assertEquals(List(workers) { 2 }, counts)
     }
+
+    @Test fun collectorCanonicalKeyWithMiddleDotPoolPassesValidation() = temporary { root, store ->
+        val cells = listOf("2026-11-25 17:02:01", "慈·爱·愈", "玛奇朵")
+        val collectorKey = "20261125170201慈爱愈玛奇朵"
+        val directory = File(root, "record/gacha/default-0").apply { mkdirs() }
+        val line = Json.encodeToString(
+            GachaRecord(index = 501, key = collectorKey, rarity = "普", type = "活动", cells = cells)
+        )
+        File(directory, "活动.jsonl").writeText(line + "\n", Charsets.UTF_8)
+
+        val snapshot = store.snapshot()
+        assertTrue("Unexpected skipped lines: ${snapshot.skipped}", snapshot.skipped.isEmpty())
+        assertEquals(1, snapshot.records.size)
+        assertEquals(collectorKey, snapshot.records.single().canonicalKey)
+
+        val legacyRecord = GachaRecord(
+            index = 502,
+            key = "20261125170201慈·爱·愈玛奇朵",
+            rarity = "普",
+            type = "活动",
+            cells = cells,
+        )
+        GachaStore.validate(legacyRecord)
+
+        val mismatchedRecord = legacyRecord.copy(key = "20261125170201其他池玛奇朵")
+        assertThrows(IllegalArgumentException::class.java) { GachaStore.validate(mismatchedRecord) }
+    }
 }

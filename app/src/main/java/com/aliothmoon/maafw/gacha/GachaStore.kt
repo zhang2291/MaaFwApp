@@ -21,7 +21,7 @@ data class GachaRecord(
     val time: String get() = cells.firstOrNull().orEmpty().replace(Regex("""^(\d{4}-\d{2}-\d{2})[.\s_T]?(\d{2}:)"""), "$1 $2")
     val pool: String get() = cells.getOrNull(1).orEmpty()
     val name: String get() {
-        val raw = cells.lastOrNull().orEmpty().trim().removePrefix("·").removeSuffix("·")
+        val raw = cells.lastOrNull().orEmpty().trim().replace(Regex("""^[·\s\-_]+|[·\s\-_]+$"""), "")
         return when (raw) {
             "县" -> "昙"
             "卡茲安" -> "卡兹安"
@@ -29,14 +29,25 @@ data class GachaRecord(
             "雷比妮斯" -> "雷比尼斯"
             "澈澈", "澈县" -> "澈"
             "諾克斯", "诺克断" -> "诺克斯"
+            "溫蒂" -> "温蒂"
+            "蘭利" -> "兰利"
+            "切爾西伯爵" -> "切尔西伯爵"
+            "露薇婭·蕾" -> "露薇娅·蕾"
+            "愛緹" -> "爱缇"
+            "觀星者" -> "观星者"
+            "麥昆" -> "麦昆"
+            "萊塔" -> "莱塔"
+            "瑪奇朵" -> "玛奇朵"
             else -> raw
         }
     }
     val category: String get() = type?.takeIf(String::isNotBlank) ?: "未判"
     val canonicalKey: String get() {
         if (cells.size >= 3) {
-            val tsDigits = Regex("""\d+""").findAll(cells[0]).map { it.value }.take(6).joinToString("")
-            val p = cells[1].replace(Regex("""\s+"""), "")
+            val tsMatches = Regex("""\d+""").findAll(cells[0]).map { it.value }.toList()
+            val tsDigits = if (tsMatches.size >= 6) tsMatches.take(6).joinToString("")
+            else cells[0].replace(Regex("""[\s._T\-:]+"""), "")
+            val p = cells[1].replace(Regex("""[\s·.•\u2022\u25cf\u00b7]+"""), "")
             return "$tsDigits$p$name"
         }
         return key
@@ -98,7 +109,17 @@ class GachaStore(private val dataRoot: File) {
             require(record.cells.first().matches(Regex("""\d{4}-\d{2}-\d{2}[.\s_T]?\d{2}:\d{2}:\d{2}"""))) { "记录时间格式不正确" }
             require(record.pool.isNotBlank() && record.name.isNotBlank()) { "卡池或角色为空" }
             val literal = key(record.cells)
-            require(record.key.isBlank() || record.key == literal || record.key == record.canonicalKey) { "记录身份字段与明细不一致" }
+            val legacyCanonical = if (record.cells.size >= 3) {
+                val tsDigits = Regex("""\d+""").findAll(record.cells[0]).map { it.value }.take(6).joinToString("")
+                val p = record.cells[1].replace(Regex("""\s+"""), "")
+                "$tsDigits$p${record.name}"
+            } else record.key
+            require(
+                record.key.isBlank() ||
+                    record.key == literal ||
+                    record.key == record.canonicalKey ||
+                    record.key == legacyCanonical
+            ) { "记录身份字段与明细不一致" }
             require(record.category.length <= 100) { "追踪类型过长" }
         }
 
